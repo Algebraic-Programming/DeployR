@@ -1,7 +1,7 @@
-option('distributedEngine', type : 'combo',
-       choices : [ 'mpi', 'lpf', 'none' ], 
-       description : 'Specifies which engine (if any) to use for distributed computing examples',
-       value: 'none'
+option('engine', type : 'combo',
+       choices : [ 'mpi', 'lpf', 'local' ], 
+       description : 'Specifies which distributed execution engine to use',
+       value: 'local'
        )
 
 option('buildTests', type : 'boolean', value : false,

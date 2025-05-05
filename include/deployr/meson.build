@@ -1,12 +1,12 @@
 # Handling distributed engine options
-if distributedEngine == 'mpi'
+if engine == 'mpi'
 DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_MPI'
 endif
 
-if distributedEngine == 'lpf'
+if engine == 'lpf'
 DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LPF'
 endif
 
-if distributedEngine == 'none'
-DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_NONE'
+if engine == 'local'
+DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LOCAL'
 endif

@@ -19,11 +19,11 @@ if meson.is_subproject() == false
 
   # Getting selected distributed engine
 
-  distributedEngine = get_option('distributedEngine')
+  engine = get_option('engine')
 
   # If, selected, adding the dependency for the distributed engine
-  if distributedEngine != 'none'
-    HiCRBackends += distributedEngine
+  if engine != 'local'
+    HiCRBackends += engine
   endif
 
   HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=tasking' ])
