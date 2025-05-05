@@ -6,16 +6,16 @@ project('DeployR', [ 'cpp', 'c'],
   ]
 )
 
-####### Storage for TaskR dependencies
+####### Storage for DeployR dependencies
 
-taskrDependencies = [ ]
+deployrDependencies = [ ]
 
 ####### Getting HiCR dependency (only if not a subproject)
 
 if meson.is_subproject() == false
 
   # Selecting default HiCR Backends
-  HiCRBackends = [ 'hwloc', 'pthreads', 'boost', 'nosv' ]
+  HiCRBackends = [ 'hwloc', 'pthreads', 'boost' ]
 
   # Getting selected distributed engine
 
@@ -28,11 +28,13 @@ if meson.is_subproject() == false
 
   HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=tasking' ])
   HiCRBuildDep = HiCRProject.get_variable('hicrBuildDep')
-  taskrDependencies += HiCRBuildDep
+  deployrDependencies += HiCRBuildDep
 
 endif
 
-####### Creating TaskR dependency
+####### Creating DeployR dependency
+
+subdir('include/deployr')
 
 # Warning handling option
 warningAsErrorFlags=[]
@@ -40,14 +42,22 @@ if get_option('compileWarningsAsErrors') == true
   warningAsErrorFlags=[ '-Werror' ]
 endif
 
-TaskRBuildCppArgs = [
+DeployRBuildCppArgs = [
  '-Wfatal-errors',
   warningAsErrorFlags
  ]
 
-TaskRBuildIncludes = include_directories([
+DeployRBuildIncludes = include_directories([
    'include'
   ])
+
+####### Collect the dependencies
+
+DeployRBuildDep = declare_dependency(
+    compile_args: DeployRBuildCppArgs,
+    include_directories: DeployRBuildIncludes,
+    dependencies: deployrDependencies
+    )
 
 ####### Build test / example targets only if HiCR is being loaded as a subproject
 
