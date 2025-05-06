@@ -24,6 +24,11 @@ class MPI final : public deployr::Engine
     _memoryManager = std::make_unique<HiCR::backend::mpi::MemoryManager>();
   };
 
+  __INLINE__ void finalize() override
+  {
+    
+  }
+  
   private:
 
 };

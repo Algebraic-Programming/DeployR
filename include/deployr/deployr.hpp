@@ -18,7 +18,7 @@ class DeployR final
 {
  public:
 
-  DeployR()
+  DeployR(const nlohmann::json config)
   {
 
   }
@@ -27,7 +27,7 @@ class DeployR final
 
   __INLINE__ void initialize(int* pargc, char*** pargv)
   {
-      //// Instantiating distributed execution engine
+      // Instantiating distributed execution engine
       #ifdef _DEPLOYR_DISTRIBUTED_ENGINE_MPI
       _engine = std::make_unique<engine::MPI>(pargc, pargv);
       #endif
@@ -35,6 +35,11 @@ class DeployR final
       #ifdef _DEPLOYR_DISTRIBUTED_ENGINE_LOCAL
       _engine = std::make_unique<engine::Local>(pargc, pargv);
       #endif
+  }
+
+  __INLINE__ void finalize()
+  {
+    _engine->finalize();
   }
 
 private:

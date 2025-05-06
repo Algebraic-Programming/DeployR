@@ -24,6 +24,10 @@ class Local final : public deployr::Engine
     _memoryManager = std::make_unique<HiCR::backend::hwloc::MemoryManager>();
   };
 
+  __INLINE__ void finalize() override
+  {
+    
+  }
 
   private:
 

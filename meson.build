@@ -10,27 +10,29 @@ project('DeployR', [ 'cpp', 'c'],
 
 deployrDependencies = [ ]
 
-####### Getting HiCR dependency (only if not a subproject)
+####### Getting HiCR dependency
 
-if meson.is_subproject() == false
+# Selecting default HiCR Backends
+HiCRBackends = [ 'hwloc', 'pthreads', 'boost' ]
 
-  # Selecting default HiCR Backends
-  HiCRBackends = [ 'hwloc', 'pthreads', 'boost' ]
+# Getting selected distributed engine
 
-  # Getting selected distributed engine
+engine = get_option('engine')
 
-  engine = get_option('engine')
-
-  # If, selected, adding the dependency for the distributed engine
-  if engine != 'local'
-    HiCRBackends += engine
-  endif
-
-  HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=tasking' ])
-  HiCRBuildDep = HiCRProject.get_variable('hicrBuildDep')
-  deployrDependencies += HiCRBuildDep
-
+# If, selected, adding the dependency for the distributed engine
+if engine != 'local'
+  HiCRBackends += engine
 endif
+
+HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=tasking' ])
+HiCRBuildDep = HiCRProject.get_variable('hicrBuildDep')
+deployrDependencies += HiCRBuildDep
+
+####### Getting Hopcroft Karp dependency
+
+HopcroftKarpProject = subproject('hopcroft_karp', required: true)
+HopcroftKarpBuildDep = HopcroftKarpProject.get_variable('HopcroftKarpBuildDep')
+deployrDependencies += HopcroftKarpBuildDep
 
 ####### Creating DeployR dependency
 

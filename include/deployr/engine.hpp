@@ -14,6 +14,7 @@ class Engine
     virtual ~Engine() = default;
 
     virtual void initialize(int* pargc, char*** pargv) = 0;
+    virtual void finalize() = 0;
 
     protected: 
 
