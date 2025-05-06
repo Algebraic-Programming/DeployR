@@ -34,9 +34,21 @@ HopcroftKarpProject = subproject('hopcroft_karp', required: true)
 HopcroftKarpBuildDep = HopcroftKarpProject.get_variable('HopcroftKarpBuildDep')
 deployrDependencies += HopcroftKarpBuildDep
 
-####### Creating DeployR dependency
+##### Handling distributed engine options
 
-subdir('include/deployr')
+if engine == 'mpi'
+DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_MPI'
+endif
+
+if engine == 'lpf'
+DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LPF'
+endif
+
+if engine == 'local'
+DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LOCAL'
+endif
+
+####### Creating DeployR dependency
 
 # Warning handling option
 warningAsErrorFlags=[]
@@ -45,6 +57,7 @@ if get_option('compileWarningsAsErrors') == true
 endif
 
 DeployRBuildCppArgs = [
+DeployRDistributedCppFlag,
  '-Wfatal-errors',
   warningAsErrorFlags
  ]

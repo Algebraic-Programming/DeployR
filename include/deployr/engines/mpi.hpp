@@ -1,3 +1,5 @@
+#pragma once
+
 #include <hicr/backends/mpi/communicationManager.hpp>
 #include <hicr/backends/mpi/instanceManager.hpp>
 #include <hicr/backends/mpi/memoryManager.hpp>
@@ -26,7 +28,12 @@ class MPI final : public deployr::Engine
 
   __INLINE__ void finalize() override
   {
-    
+    _instanceManager->finalize(_topology);
+  }
+
+  __INLINE__ void abort() override
+  {
+    MPI_Abort(MPI_COMM_WORLD, 1);
   }
   
   private:
