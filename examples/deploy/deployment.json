@@ -1,6 +1,34 @@
 {
+    "Name": "LLM Deployment",
     "Requests":
     [
-        
+        {
+            "Name": "Coordinator",
+            "Replicas": 1,
+            "Function": "CoordinatorFc",
+            "Topology":
+            {
+                "Minimum Host Processing Units": 4,
+                "Minimum Host RAM (GB)": 16,
+                "Devices": [ ]
+            }
+        },
+        {
+            "Name": "Worker",
+            "Replicas": 2,
+            "Function": "WorkerFc",
+            "Topology":
+            {
+                "Minimum Host Processing Units": 16,
+                "Minimum Host RAM (GB)": 64,
+                "Devices":
+                [
+                    {
+                        "Type": "Ascend 310",
+                        "Count": 8
+                    }
+                ]
+            }
+        }
     ]
 }

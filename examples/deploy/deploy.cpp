@@ -4,9 +4,11 @@
 
 int main(int argc, char* argv[])
 {
+    // Creating DeployR instance
+    deployr::DeployR _deployr;
+    
     // Initializing DeployR
     printf("Initializing DeployR\n");
-    deployr::DeployR _deployr;
     _deployr.initialize(&argc, &argv);
 
     // If I am the root instance, read the deployment file. Otherwise, keep it empty
@@ -29,8 +31,14 @@ int main(int argc, char* argv[])
         deploymentJs = nlohmann::json::parse(ifs);
     }
 
-    // Obtaining deployment configuration file
-    _deployr.deploy(deploymentJs);
+    // Creating deployment
+    deployr::Deployment deployment(deploymentJs);
+
+    // Deploying
+    _deployr.deploy(deployment);
+
+    // Finalize
     _deployr.finalize();
-    printf("Done.\n");
+
+    printf("Finished Successfully\n");
 }

@@ -10,32 +10,65 @@ class Request final
 {
     public:
 
-    struct device_t 
+    class Device
     {
-      std::string type;
+      public: 
+
+      Device() = delete;
+      ~Device() = default;
+      Device(const nlohmann::json& deviceJs)
+      {
+        // Parsing device type
+        _type = hicr::json::getString(deviceJs, "Type");
+
+        // Parsing device count
+        _count = hicr::json::getNumber<size_t>(deviceJs, "Count");
+      }
+
+      __INLINE__ const std::string& getType() const { return _type; }
+      __INLINE__ const std::size_t getCount() const { return _count; }
+
+      private:
+
+      std::string _type;
       size_t _count;
     };
 
-    Request
-    (
-      const size_t minCPUMemoryGB,
-      const size_t minCPUProcessingUnits,
-      const std::vector<device_t>& devices
-    ) :
-    _minCPUMemoryGB(minCPUMemoryGB),
-    _minCPUProcessingUnits(minCPUProcessingUnits),
-    _devices(devices)
+    Request() = delete;
+    ~Request() = default;
+    Request(const nlohmann::json& requestJs)
     {
+      // Parsing deployment name
+      _name = hicr::json::getString(requestJs, "Name");
 
+      // Parsing replica count
+      _replicas = hicr::json::getNumber<size_t>(requestJs, "Replicas");
+
+      // Parsing topology
+      const auto topologyJs = hicr::json::getObject(requestJs, "Topology");
+
+      // Min host capabilities
+      _minHostMemoryGB = hicr::json::getNumber<size_t>(topologyJs, "Minimum Host RAM (GB)");
+      _minHostProcessingUnits = hicr::json::getNumber<size_t>(topologyJs, "Minimum Host Processing Units");
+
+      // Parsing request devices
+      auto devicesJs = hicr::json::getArray<nlohmann::json>(topologyJs, "Devices");
+      for (const auto& deviceJs : devicesJs) _devices.push_back(Device(deviceJs));
     }
 
-    virtual ~Request() = default;
+    __INLINE__ const size_t getMinHostMemoryGB() const { return _minHostMemoryGB; }
+    __INLINE__ const size_t getMinHostProcessingUnits() const { return _minHostProcessingUnits; }
+    __INLINE__ const size_t getReplicas() const { return _replicas; }
+    __INLINE__ const std::vector<Device>& getDevices() const { return _devices; }
+    __INLINE__ const std::string& getName() const { return _name; }
 
     private: 
 
-    const size_t _minCPUMemoryGB;
-    const size_t _minCPUProcessingUnits;
-    const std::vector<device_t> _devices;
+    std::string _name;
+    size_t _replicas;
+    size_t _minHostMemoryGB;
+    size_t _minHostProcessingUnits;
+    std::vector<Device> _devices;
 
 }; // class Request
 

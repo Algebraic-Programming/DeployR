@@ -43,20 +43,36 @@ class DeployR final
     _engine->initialize(pargc, pargv);
   }
 
-  __INLINE__ void deploy(const nlohmann::json& deploymentJs)
+  __INLINE__ void deploy(Deployment& deployment)
   {
-    // Parsing deployment requests
-    auto requestsJs = hicr::json::getArray<nlohmann::json>(deploymentJs, "Requests");
+    printf("Deploying '%s'\n", deployment.getName().c_str());
+    
+    const auto& requests = deployment.getRequests();
+    printf("Requests: \n");
+    for (const auto& request : requests)
+    {
+      printf(" + '%s'\n", request.getName().c_str());
+      printf("   Replicas: %lu\n", request.getReplicas());
+      printf("   Min Host Memory: %lu GB\n", request.getMinHostMemoryGB());
+      printf("   Min Host Processing Units: %lu\n", request.getMinHostProcessingUnits());
+      printf("   Devices: \n");
+
+      const auto& devices = request.getDevices();
+      for (const auto& device : devices)
+      {
+        printf("    + Type: '%s'\n", device.getType().c_str());
+        printf("      Count: %lu\n", device.getCount());
+      }
+    }
   }
 
   __INLINE__ void finalize() { _engine->finalize(); }
   __INLINE__ void abort() { _engine->abort(); }
   __INLINE__ bool isRootInstance() const { return _engine->isRootInstance(); }
 
-private:
+  private:
 
   std::unique_ptr<Engine> _engine;
-  std::unique_ptr<Deployment> _deployment;
 
 }; // class DeployR
 
