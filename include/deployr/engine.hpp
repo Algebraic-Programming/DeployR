@@ -15,11 +15,14 @@ class Engine
     Engine() = default;
     virtual ~Engine() = default;
 
+    __INLINE__ size_t getInstanceCount() const { return _instanceManager->getInstances().size(); }
     virtual void initialize(int* pargc, char*** pargv) = 0;
     virtual void abort() = 0;
     virtual void finalize() = 0;
 
-    __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
+    __INLINE__ bool isRootInstance() const {
+        printf("Instance Id: %lu / root: %lu\n", _instanceManager->getCurrentInstance()->getId(),_instanceManager->getRootInstanceId());
+         return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
 
     protected: 
 

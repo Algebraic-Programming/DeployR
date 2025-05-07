@@ -41,31 +41,81 @@ class DeployR final
   {
     // Initializing distributed execution engine
     _engine->initialize(pargc, pargv);
+
+    // If this is not the root instance, wait for incoming RPCs
+    if (_engine->isRootInstance() == false) while(true);
   }
 
   __INLINE__ void deploy(Deployment& deployment)
   {
-    printf("Deploying '%s'\n", deployment.getName().c_str());
+    // Printing information before deploying
+    printDeploymentInfo(deployment);
+
+    // Counting the exact number of instances requested.
+    size_t instancesRequested = 0;
+    for (const auto& request : deployment.getRequests()) instancesRequested += request.getReplicas();
+
+    // Getting the initial number of instances
+    size_t initialInstanceCount = _engine->getInstanceCount();
+
+    // Printing instance count information
+    printf("[DeployR] Initial Instances:   %lu\n", initialInstanceCount);
+    printf("[DeployR] Requested Instances: %lu\n", instancesRequested);
+
+    // We handle the following scenarios:
+    // With N: number of requested instances
+    // With K: number of initial instances
+    
+    // If K > N, more initial instances than requested provided. Abort execution.
+    if (initialInstanceCount > instancesRequested)
+    {
+      fprintf(stderr, "[DeployR] More initial instances (%lu) provided than required (%lu) were provided.\n", initialInstanceCount, instancesRequested);
+      _engine->abort();
+    } 
+
+    // If 1 < K < N, this is the hybrid scenario, not handled as it is complex and unlikely to be required. 
+    if (initialInstanceCount > 1 && initialInstanceCount < instancesRequested)
+    {
+      fprintf(stderr, "[DeployR] Irregular number of initial instances (%lu) provided. Must be either 1 or %lu for this request.\n", initialInstanceCount, instancesRequested);
+      _engine->abort();
+    } 
+
+    // If K == 1, this is the cloud scenario. N-1 instances will be created.
+    if (initialInstanceCount == 1 && initialInstanceCount < instancesRequested)
+    {
+      fprintf(stderr, "[DeployR] TBD: create more instances according with requested instance hardware requirements\n");
+      _engine->abort();
+    } 
+
+    // Proceed with request to instance matching
+    
+
+  }
+
+  __INLINE__ void printDeploymentInfo(const Deployment& deployment)
+  {
+    printf("[DeployR] Deployment: '%s'\n", deployment.getName().c_str());
     
     const auto& requests = deployment.getRequests();
-    printf("Requests: \n");
+    printf("[DeployR]   Requests: \n");
     for (const auto& request : requests)
     {
-      printf(" + '%s'\n", request.getName().c_str());
-      printf("   Replicas: %lu\n", request.getReplicas());
-      printf("   Min Host Memory: %lu GB\n", request.getMinHostMemoryGB());
-      printf("   Min Host Processing Units: %lu\n", request.getMinHostProcessingUnits());
-      printf("   Devices: \n");
+      printf("[DeployR]  + '%s'\n", request.getName().c_str());
+      printf("[DeployR]    Replicas: %lu\n", request.getReplicas());
+      printf("[DeployR]    Min Host Memory: %lu GB\n", request.getMinHostMemoryGB());
+      printf("[DeployR]    Min Host Processing Units: %lu\n", request.getMinHostProcessingUnits());
+      printf("[DeployR]    Devices: \n");
 
       const auto& devices = request.getDevices();
       for (const auto& device : devices)
       {
-        printf("    + Type: '%s'\n", device.getType().c_str());
-        printf("      Count: %lu\n", device.getCount());
+        printf("[DeployR]      + Type: '%s'\n", device.getType().c_str());
+        printf("[DeployR]        Count: %lu\n", device.getCount());
       }
     }
   }
 
+  __INLINE__ size_t getInstanceCount() const { return _engine->getInstanceCount(); }
   __INLINE__ void finalize() { _engine->finalize(); }
   __INLINE__ void abort() { _engine->abort(); }
   __INLINE__ bool isRootInstance() const { return _engine->isRootInstance(); }
