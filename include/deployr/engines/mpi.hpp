@@ -19,7 +19,7 @@ class MPI final : public deployr::Engine
 
   ~MPI() = default;
 
-  __INLINE__ void initialize(int* pargc, char*** pargv) override
+  __INLINE__ void initializeManagers(int* pargc, char*** pargv) override
   {
     _instanceManager = HiCR::backend::mpi::InstanceManager::createDefault(pargc, pargv);
     _communicationManager = std::make_unique<HiCR::backend::mpi::CommunicationManager>(MPI_COMM_WORLD);

@@ -24,7 +24,7 @@ if engine != 'local'
   HiCRBackends += engine
 endif
 
-HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=tasking' ])
+HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=RPCEngine' ])
 HiCRBuildDep = HiCRProject.get_variable('hicrBuildDep')
 deployrDependencies += HiCRBuildDep
 
