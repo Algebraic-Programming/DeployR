@@ -28,7 +28,7 @@ class MPI final : public deployr::Engine
 
   __INLINE__ void finalize() override
   {
-    _instanceManager->finalize(_topology);
+    _instanceManager->finalize();
   }
 
   __INLINE__ void abort() override

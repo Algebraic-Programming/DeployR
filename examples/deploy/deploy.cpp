@@ -13,23 +13,23 @@ int main(int argc, char* argv[])
     // Checking arguments
     if (argc != 2)
     {
-        fprintf(stderr, "Error: Must provide the deployment file as argument.\n");
+        fprintf(stderr, "Error: Must provide the request file as argument.\n");
         _deployr.abort();
         return -1;
     }
 
-    // Getting filename
-    std::string deploymentFilePath = std::string(argv[1]);
+    // Getting request file name from arguments
+    std::string requestFilePath = std::string(argv[1]);
 
-    // Parsing file contents to a JSON object
-    std::ifstream ifs(deploymentFilePath);
-    auto deploymentJs = nlohmann::json::parse(ifs);
+    // Parsing request file contents to a JSON object
+    std::ifstream ifs(requestFilePath);
+    auto requestJs = nlohmann::json::parse(ifs);
 
-    // Creating deployment
-    deployr::Deployment deployment(deploymentJs);
+    // Creating request
+    deployr::Request request(requestJs);
 
-    // Deploying
-    _deployr.deploy(deployment);
+    // Deploying request, getting deployment
+    auto deployment = _deployr.deploy(request);
 
     // Finalize
     _deployr.finalize();

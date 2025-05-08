@@ -6,6 +6,7 @@
 #include <nlohmann_json/json.hpp>
 #include <nlohmann_json/parser.hpp>
 #include "engine.hpp"
+#include "request.hpp"
 #include "deployment.hpp"
 
 #ifdef _DEPLOYR_DISTRIBUTED_ENGINE_MPI
@@ -46,14 +47,14 @@ class DeployR final
     if (_engine->isRootInstance() == false) while(true);
   }
 
-  __INLINE__ void deploy(Deployment& deployment)
+  __INLINE__ Deployment deploy(Request& request)
   {
     // Printing information before deploying
-    printDeploymentInfo(deployment);
+    printRequestInfo(request);
 
     // Counting the exact number of instances requested.
     size_t instancesRequested = 0;
-    for (const auto& request : deployment.getRequests()) instancesRequested += request.getReplicas();
+    for (const auto& request : request.getMachines()) instancesRequested += request.getReplicas();
 
     // Getting the initial number of instances
     size_t initialInstanceCount = _engine->getInstanceCount();
@@ -89,24 +90,26 @@ class DeployR final
 
     // Proceed with request to instance matching
     
-
+ 
+     Deployment deployment;
+     return deployment;
   }
 
-  __INLINE__ void printDeploymentInfo(const Deployment& deployment)
+  __INLINE__ void printRequestInfo(const Request& request)
   {
-    printf("[DeployR] Deployment: '%s'\n", deployment.getName().c_str());
+    printf("[DeployR] Request: '%s'\n", request.getName().c_str());
     
-    const auto& requests = deployment.getRequests();
-    printf("[DeployR]   Requests: \n");
-    for (const auto& request : requests)
+    const auto& machines = request.getMachines();
+    printf("[DeployR]   Machines: \n");
+    for (const auto& machine : machines)
     {
-      printf("[DeployR]  + '%s'\n", request.getName().c_str());
-      printf("[DeployR]    Replicas: %lu\n", request.getReplicas());
-      printf("[DeployR]    Min Host Memory: %lu GB\n", request.getMinHostMemoryGB());
-      printf("[DeployR]    Min Host Processing Units: %lu\n", request.getMinHostProcessingUnits());
+      printf("[DeployR]  + '%s'\n", machine.getName().c_str());
+      printf("[DeployR]    Replicas: %lu\n", machine.getReplicas());
+      printf("[DeployR]    Min Host Memory: %lu GB\n", machine.getMinHostMemoryGB());
+      printf("[DeployR]    Min Host Processing Units: %lu\n", machine.getMinHostProcessingUnits());
       printf("[DeployR]    Devices: \n");
 
-      const auto& devices = request.getDevices();
+      const auto& devices = machine.getDevices();
       for (const auto& device : devices)
       {
         printf("[DeployR]      + Type: '%s'\n", device.getType().c_str());
