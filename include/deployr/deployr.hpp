@@ -43,13 +43,6 @@ class DeployR final
     // Initializing distributed execution engine
     _engine->initialize(pargc, pargv);
 
-    // Getting machine topology
-    _topology = _engine->getMachineTopology();
-    //printf("%s\n", _topology.serialize().dump(2).c_str());
-
-    // Registering DeployR management RPCs
-    // _engine->registerRPC("[DeployR] Get Topology", [this](){  })
-
     // If this is not the root instance, wait for incoming RPCs
     if (_engine->isRootInstance() == false) while(true);
   }
@@ -95,6 +88,18 @@ class DeployR final
       _engine->abort();
     } 
 
+    // Getting global system topology
+    auto globalTopology = _engine->getGlobalTopology();
+
+    // Printing topology
+    //printf("[DeployR] Detected Global Topology\n");
+    // for (size_t i = 0; i < globalTopology.size(); i++)
+    // {
+      // printf("Instance: %lu\n", i);
+      //printf("%s\n", globalTopology[i].serialize().dump(2).c_str());
+      //printf("--------\n");
+    // }
+
     // Proceed with request to instance matching
  
      Deployment deployment;
@@ -132,7 +137,6 @@ class DeployR final
   private:
 
   std::unique_ptr<Engine> _engine;
-  HiCR::Topology _topology;
 
 }; // class DeployR
 

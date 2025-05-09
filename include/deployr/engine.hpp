@@ -5,19 +5,24 @@
 #include <hicr/core/memoryManager.hpp>
 #include <hicr/core/computeManager.hpp>
 #include <hicr/frontends/RPCEngine/RPCEngine.hpp>
+#include <hicr/backends/pthreads/computeManager.hpp>
 #include <memory>
 
-// Enabling topology managers (to discover the system's hardware) based on the selected backends during compilation
+//// Enabling topology managers (to discover the system's hardware) based on the selected backends during compilation
+
+// The HWLoc topology manager is mandatory
+
+#include <hwloc.h>
+#include <hicr/backends/hwloc/topologyManager.hpp>
+
+// Optional topology managers follow
 
 #ifdef _HICR_USE_ASCEND_BACKEND_
   #include <acl/acl.h>
   #include <hicr/backends/ascend/topologyManager.hpp>
 #endif // _HICR_USE_ASCEND_BACKEND_
 
-#ifdef _HICR_USE_HWLOC_BACKEND_
-  #include <hwloc.h>
-  #include <hicr/backends/hwloc/topologyManager.hpp>
-#endif // _HICR_USE_HWLOC_BACKEND_
+#define __DEPLOYR_TOPOLOGY_RPC_NAME "[DeployR] Get Topology"
 
 namespace deployr 
 {
@@ -36,7 +41,6 @@ class Engine
         initializeManagers(pargc, pargv);
 
         // Initializing topology managers, as configured
-        #ifdef _HICR_USE_HWLOC_BACKEND_
 
         // Creating HWloc topology object
         auto topology = new hwloc_topology_t;
@@ -50,24 +54,91 @@ class Engine
         // Adding topology manager to the list
         _topologyManagers.push_back(std::move(hwlocTopologyManager));
       
-      #endif // _HICR_USE_HWLOC_BACKEND_
-      
-      #ifdef _HICR_USE_ASCEND_BACKEND_
-      
-        // Initialize (Ascend's) ACL runtime
-        aclError err = aclInit(NULL);
-        if (err != ACL_SUCCESS) HICR_THROW_RUNTIME("Failed to initialize Ascend Computing Language. Error %d", err);
-      
-        // Initializing ascend topology manager
-        auto ascendTopologyManager = std::make_unique<HiCR::backend::ascend::TopologyManager>();
-      
-        // Adding topology manager to the list
-        _topologyManagers.push_back(std::move(ascendTopologyManager));
-      
-      #endif // _HICR_USE_ASCEND_BACKEND_
+        #ifdef _HICR_USE_ASCEND_BACKEND_
+        
+            // Initialize (Ascend's) ACL runtime
+            aclError err = aclInit(NULL);
+            if (err != ACL_SUCCESS) HICR_THROW_RUNTIME("Failed to initialize Ascend Computing Language. Error %d", err);
+        
+            // Initializing ascend topology manager
+            auto ascendTopologyManager = std::make_unique<HiCR::backend::ascend::TopologyManager>();
+        
+            // Adding topology manager to the list
+            _topologyManagers.push_back(std::move(ascendTopologyManager));
+        
+        #endif // _HICR_USE_ASCEND_BACKEND_
+
+        // Getting local topology
+        _localTopology = detectLocalTopology();
+
+        // Initializing RPC-related managers
+        _computeManager = std::make_unique<HiCR::backend::pthreads::ComputeManager>();
+
+        // Finding the first memory space and compute resource to create our RPC engine
+        auto RPCDevice = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
+        auto RPCMemorySpace = RPCDevice->getMemorySpaceList().begin().operator*();
+        auto RPCComputeResource = RPCDevice->getComputeResourceList().begin().operator*();
+
+        // Instantiating RPC engine
+        _rpcEngine = std::make_unique<HiCR::frontend::RPCEngine>(*_communicationManager, *_instanceManager, *_memoryManager, *_computeManager, RPCMemorySpace, RPCComputeResource);
+
+        // Initializing RPC engine
+        _rpcEngine->initialize();
+
+        // Registering topology exchanging RPC
+        auto getTopologyExecutionunit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit([this](void*)
+        {
+            // Serializing
+            const auto serializedTopology = _localTopology.serialize().dump();
+
+            // Returning serialized topology
+            _rpcEngine->submitReturnValue((void*)serializedTopology.c_str(), serializedTopology.size());
+        });
+        _rpcEngine->addRPCTarget(__DEPLOYR_TOPOLOGY_RPC_NAME, getTopologyExecutionunit);
+
+        // Gathering global topology into the root instance
+        _globalTopology = gatherGlobalTopology();
     };
 
-    __INLINE__ HiCR::Topology getMachineTopology()
+    __INLINE__ const HiCR::Topology& getLocalTopology() const { return _localTopology; }
+    __INLINE__ const std::vector<HiCR::Topology>& getGlobalTopology() const { return _globalTopology; }
+
+    virtual void abort() = 0;
+    virtual void finalize() = 0;
+
+    __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
+
+    protected: 
+
+    virtual void initializeManagers(int* pargc, char*** pargv) = 0;
+
+    // Storage for the distributed engine's communication manager
+    std::unique_ptr<HiCR::CommunicationManager> _communicationManager;
+
+    // Storage for the distributed engine's instance manager
+    std::unique_ptr<HiCR::InstanceManager> _instanceManager;
+
+    // Storage for the distributed engine's memory manager
+    std::unique_ptr<HiCR::MemoryManager> _memoryManager;
+
+    // Storage for topology managers
+    std::vector<std::unique_ptr<HiCR::TopologyManager>> _topologyManagers;
+
+    // Storage for compute manager
+    std::unique_ptr<HiCR::backend::pthreads::ComputeManager> _computeManager;
+
+    // RPC engine
+    std::unique_ptr<HiCR::frontend::RPCEngine> _rpcEngine;
+
+    // Storage for the local system topology
+    HiCR::Topology _localTopology;
+
+    // Storage for the global system topology
+    std::vector<HiCR::Topology> _globalTopology;
+    
+    private:
+
+    __INLINE__ HiCR::Topology detectLocalTopology()
     {
         // Storage for the machine's topology
         HiCR::Topology topology;
@@ -86,28 +157,54 @@ class Engine
         return topology;
     }
 
-    virtual void abort() = 0;
-    virtual void finalize() = 0;
+    __INLINE__ std::vector<HiCR::Topology> gatherGlobalTopology()
+    {
+        // Storage
+        std::vector<HiCR::Topology> globalTopology;
 
-    __INLINE__ bool isRootInstance() const {
-        printf("Instance Id: %lu / root: %lu\n", _instanceManager->getCurrentInstance()->getId(),_instanceManager->getRootInstanceId());
-         return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
+        // If I am not root, listen for the incoming RPC and return an empty topology
+        if (isRootInstance() == false) _rpcEngine->listen(); 
 
-    protected: 
+        // If I am root, request topology from all instances
+        else
+         for (const auto& instance : _instanceManager->getInstances())
+            // If its the root instance (me), just push my local topology
+            if (instance->isRootInstance() == true) globalTopology.push_back(_localTopology);
+            // If not, it's another instance: send RPC and deserialize return value
+            else
+            {
+                // Requessting RPC from the remote instance
+                _rpcEngine->requestRPC(*instance, __DEPLOYR_TOPOLOGY_RPC_NAME);
 
-    virtual void initializeManagers(int* pargc, char*** pargv) = 0;
+                // Getting return value as a memory slot
+                auto returnValue = _rpcEngine->getReturnValue(*instance);
 
-    // Storage for the distributed engine's communication manager
-    std::unique_ptr<HiCR::CommunicationManager> _communicationManager;
+                // Receiving raw serialized topology information from the worker
+                std::string serializedTopology = (char *)returnValue->getPointer();
 
-    // Storage for the distributed engine's instance manager
-    std::unique_ptr<HiCR::InstanceManager> _instanceManager;
+                // Parsing serialized raw topology into a json object
+                auto topologyJson = nlohmann::json::parse(serializedTopology);
 
-    // Storage for the distributed engine's memory manager
-    std::unique_ptr<HiCR::MemoryManager> _memoryManager;
+                // Freeing return value
+                _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
 
-    // Storage for the distributed engine's topology managers
-    std::vector<std::unique_ptr<HiCR::TopologyManager>> _topologyManagers;
+                // HiCR topology object to obtain
+                HiCR::Topology topology;
+
+                // Obtaining the topology from the serialized object
+                topology.merge(HiCR::backend::hwloc::TopologyManager::deserializeTopology(topologyJson));
+
+                #ifdef _HICR_USE_ASCEND_BACKEND_
+                topology.merge(HiCR::backend::ascend::TopologyManager::deserializeTopology(topologyJson));
+                #endif // _HICR_USE_ASCEND_BACKEND_
+
+                // Pushing topology into the vector
+                globalTopology.push_back(topology);
+            }
+        
+        // Return global topology
+        return globalTopology;
+    }
 
 }; // class Engine
 

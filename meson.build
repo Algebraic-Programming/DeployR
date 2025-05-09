@@ -13,7 +13,7 @@ deployrDependencies = [ ]
 ####### Getting HiCR dependency
 
 # Selecting default HiCR Backends
-HiCRBackends = [ 'hwloc', 'pthreads', 'boost' ]
+HiCRBackends = [ 'hwloc', 'pthreads' ]
 
 # Getting selected distributed engine
 
