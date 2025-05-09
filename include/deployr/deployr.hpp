@@ -54,7 +54,7 @@ class DeployR final
 
     // Counting the exact number of instances requested.
     size_t instancesRequested = 0;
-    for (const auto& request : request.getMachines()) instancesRequested += request.getReplicas();
+    for (const auto& machine : request.getMachines()) instancesRequested += machine.getReplicas();
 
     // Getting the initial number of instances
     size_t initialInstanceCount = _engine->getInstanceCount();
@@ -100,10 +100,19 @@ class DeployR final
       //printf("--------\n");
     // }
 
+    // Building deployment object
+    for (const auto& machine : request.getMachines())
+      for (size_t i = 0; i < machine.getReplicas(); i++)
+       _deployment.addMachine(machine);
+    
+    for (const auto& topology : globalTopology)
+       _deployment.addResource(topology);
+
     // Proceed with request to instance matching
- 
-     Deployment deployment;
-     return deployment;
+    _deployment.performMatching();
+    
+
+    return _deployment;
   }
 
   __INLINE__ void printRequestInfo(const Request& request)
@@ -137,6 +146,7 @@ class DeployR final
   private:
 
   std::unique_ptr<Engine> _engine;
+  Deployment _deployment;
 
 }; // class DeployR
 

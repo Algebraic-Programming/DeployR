@@ -1,5 +1,7 @@
 #pragma once
 
+#include <hicr/core/definitions.hpp>
+
 namespace deployr 
 {
 

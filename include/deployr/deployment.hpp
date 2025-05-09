@@ -1,5 +1,9 @@
 #pragma once
 
+#include <hicr/core/definitions.hpp>
+#include <hopcroft_karp.hpp>
+#include "request.hpp"
+
 namespace deployr 
 {
 
@@ -10,8 +14,45 @@ class Deployment final
     Deployment() = default;
     ~Deployment() = default;
 
+    __INLINE__ void addMachine(const Request::Machine& machine) { _machines.push_back(machine); }
+    __INLINE__ void addResource(const HiCR::Topology& topology) { _resources.push_back(topology); }
+
+    __INLINE__ void performMatching()
+    {
+        // Building the matching graph
+        theAlgorithms::graph::HKGraph graph(_machines.size(), _resources.size());
+        for (size_t i = 0; i < _machines.size(); i++)
+            for (size_t j = 0; j < _resources.size(); j++)
+                if (checkCompatibility(_machines[i], _resources[j])) graph.addEdge(i, j);
+    }
+
     private: 
 
+    __INLINE__ bool checkCompatibility(const Request::Machine& machine, const HiCR::Topology& resource)
+    {
+        // Checking whether the resource contains the minimim host memory
+        const auto minHostMemoryGB = machine.getMinHostMemoryGB();
+
+        // Looking for NUMA Domain device to add up to the actual memory
+        size_t actualHostMemoryBytes = 0;
+        for (const auto& device : resource.getDevices())
+            if (device->getType() == "NUMA Domain")
+                for (const auto& memorySpace : device->getMemorySpaceList())
+                    if (memorySpace->getType() == "RAM")
+                        actualHostMemoryBytes = memorySpace->getSize();
+
+        // Calculating GB
+        const size_t actualHostMemoryGB = actualHostMemoryBytes / (1024ul * 1024ul * 1024ul);       
+        printf("Requesting: %lu GB host mem - Found: %lu\n", minHostMemoryGB, actualHostMemoryGB);
+
+        return true;
+    }
+
+    // Requested machines
+    std::vector<Request::Machine> _machines;
+
+    // Provided resources
+    std::vector<HiCR::Topology> _resources;
 
 }; // class Deployment
 
