@@ -30,7 +30,7 @@ class Deployment final
 
     __INLINE__ bool checkCompatibility(const Request::Machine& machine, const HiCR::Topology& resource)
     {
-        // Checking whether the resource contains the minimim host memory
+        ////////// Checking whether the resource contains the minimum host memory
         const auto minHostMemoryGB = machine.getMinHostMemoryGB();
 
         // Looking for NUMA Domain device to add up to the actual memory
@@ -43,8 +43,45 @@ class Deployment final
 
         // Calculating GB
         const size_t actualHostMemoryGB = actualHostMemoryBytes / (1024ul * 1024ul * 1024ul);       
-        printf("Requesting: %lu GB host mem - Found: %lu\n", minHostMemoryGB, actualHostMemoryGB);
+        
+        // Returning false if not enough host memory found
+        if (actualHostMemoryGB < minHostMemoryGB) return false;
 
+        ////////// Checking whether the resource contains the minimum processing units
+        const auto minHostProcessingUnits = machine.getMinHostProcessingUnits();
+
+        // Looking for NUMA Domain device to add up the number of processing units
+        size_t actualHostProcessingUnits = 0;
+        for (const auto& device : resource.getDevices())
+            if (device->getType() == "NUMA Domain")
+                for (const auto& computeResource : device->getComputeResourceList())
+                    if (computeResource->getType() == "Processing Unit")
+                        actualHostProcessingUnits++;
+
+        // Returning false if not enough processing units found
+        if (actualHostProcessingUnits < minHostProcessingUnits) return false;
+
+        //printf("Found %luGB - %lu PUs\n", actualHostMemoryGB, actualHostProcessingUnits);
+
+        ////////// Checking for requested devices
+        const auto requestedDevices = machine.getDevices();
+
+        for (const auto& requestedDevice : requestedDevices)
+        {
+            const auto requestedDeviceType = requestedDevice.getType();
+            const auto requestedDeviceCount = requestedDevice.getCount();
+
+            // Looking for NUMA Domain device to add up the number of processing units
+            size_t actualDeviceCount = 0;
+            for (const auto& device : resource.getDevices())
+                if (device->getType() == requestedDeviceType)
+                    actualDeviceCount++;
+
+            // Failing if the require device count hasn't been met                     
+            if (actualDeviceCount < requestedDeviceCount) return false;
+        }
+
+        // All requirements have been met, returning true
         return true;
     }
 
