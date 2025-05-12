@@ -43,11 +43,24 @@ class DeployR final
     // Initializing distributed execution engine
     _engine->initialize(pargc, pargv);
 
+    // Committing rpcs to the engine
+    for (const auto& rpc : _registeredFunctions) _engine->registerRPC(rpc.first, rpc.second);
+
     // If this is not the root instance, wait for incoming RPCs
-    if (_engine->isRootInstance() == false) while(true);
+    if (_engine->isRootInstance() == false) 
+    {
+      // Listening for an incoming RPC
+      _engine->listenRPCs();
+
+      // Only a single user-defined RPC shall be executed by a non-root instance
+      _engine->finalize();
+
+      // Exiting regularly.
+      exit(0);
+    }
   }
 
-  __INLINE__ Deployment deploy(Request& request)
+  __INLINE__ void deploy(Request& request)
   {
     // Printing information before deploying
     printRequestInfo(request);
@@ -109,10 +122,60 @@ class DeployR final
        _deployment.addResource(topology);
 
     // Proceed with request to instance matching
-    _deployment.performMatching();
-    
+    if (_deployment.performMatching() == false)
+    {
+      fprintf(stderr, "[DeployR] The provided resources are not sufficient for the requested instances.\n");
+      _engine->abort();
+    } 
 
-    return _deployment;
+    // Getting root instance index
+    _rootInstanceIdx = _engine->getRootInstanceIndex();
+    printf("Root Instance Idx: %lu\n", _rootInstanceIdx);
+
+    // Getting pairings
+    auto pairings = _deployment.getPairings();
+
+    // Launching initial function to each of the requested machines
+    size_t currentMachineIdx = 0;
+    for (const auto& machine : request.getMachines())
+      for (size_t i = 0; i < machine.getReplicas(); i++)
+      {
+        // Getting the destination resource idx paired to this machine request
+        const auto resourceIdx = pairings[currentMachineIdx];
+
+        // Getting the function to run for the paired machine
+        const auto fcName = machine.getFunction();
+        
+        // Checking the requested function was registered
+        if (_registeredFunctions.contains(fcName) == false)
+        {
+            fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", fcName.c_str());
+            abort();
+        } 
+        
+       
+        // Launching initial function in the destination instance
+        // If the resource index is the root instance, then don't send RPC. It will be executed manually
+        if (resourceIdx != _rootInstanceIdx)
+        {
+          printf("Launching RPC: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
+          launchFunction(resourceIdx, machine.getFunction());
+        } 
+        else
+        {
+          printf("Running Root: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
+          _rootInstanceMachine = machine;
+        } 
+
+        // Advancing current instance
+        currentMachineIdx++;
+      }
+
+    // The root instance runs its own function now
+    const auto& rootInstanceFcName = _rootInstanceMachine.getFunction();
+    const auto& rootInstanceFc = _registeredFunctions[rootInstanceFcName];
+    // printf("Root Function Name: %s\n", rootInstanceFcName.c_str());
+    rootInstanceFc();
   }
 
   __INLINE__ void printRequestInfo(const Request& request)
@@ -138,6 +201,18 @@ class DeployR final
     }
   }
 
+  __INLINE__ void registerFunction(const std::string& functionName, std::function<void()> fc)
+  {
+    // Checking if the RPC name was already used
+    if (_registeredFunctions.contains(functionName) == true)
+    {
+        fprintf(stderr, "The function '%s' was already registered.\n", functionName.c_str());
+        abort();
+    } 
+
+    // Adding new RPC to the set
+    _registeredFunctions.insert({functionName, fc});
+  }
   __INLINE__ size_t getInstanceCount() const { return _engine->getInstanceCount(); }
   __INLINE__ void finalize() { _engine->finalize(); }
   __INLINE__ void abort() { _engine->abort(); }
@@ -145,8 +220,24 @@ class DeployR final
 
   private:
 
+  __INLINE__ void launchFunction(const size_t resourceIdx, const std::string& functionName)
+  {
+    if (_registeredFunctions.contains(functionName) == false)
+    {
+        fprintf(stderr, "The function RPC '%s' is not registered. Please register it before initializing DeployR.\n", functionName.c_str());
+        abort();
+    } 
+
+    _engine->launchRPC(resourceIdx, functionName);
+  }
+
+  bool _continueExecuting = true;
   std::unique_ptr<Engine> _engine;
   Deployment _deployment;
+
+  std::map<std::string, std::function<void()>> _registeredFunctions;
+  size_t _rootInstanceIdx;
+  Request::Machine _rootInstanceMachine;
 
 }; // class DeployR
 

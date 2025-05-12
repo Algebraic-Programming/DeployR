@@ -24,8 +24,8 @@
                 "Devices":
                 [
                     {
-                        "Type": "Ascend 310",
-                        "Count": 8
+                        "Type": "NUMA Domain",
+                        "Count": 2
                     }
                 ]
             }

@@ -37,12 +37,15 @@ class Request final
         size_t _count;
       };
 
-      Machine() = delete;
+      Machine() = default;
       ~Machine() = default;
       Machine(const nlohmann::json& machineJs)
       {
-        // Parsing deployment name
+        // Parsing machine name
         _name = hicr::json::getString(machineJs, "Name");
+
+        // Parsing the name of the function to run
+        _function = hicr::json::getString(machineJs, "Function");
 
         // Parsing replica count
         _replicas = hicr::json::getNumber<size_t>(machineJs, "Replicas");
@@ -64,10 +67,12 @@ class Request final
       __INLINE__ const size_t getReplicas() const { return _replicas; }
       __INLINE__ const std::vector<Device>& getDevices() const { return _devices; }
       __INLINE__ const std::string& getName() const { return _name; }
+      __INLINE__ const std::string& getFunction() const { return _function; }
 
       private: 
 
       std::string _name;
+      std::string _function;
       size_t _replicas;
       size_t _minHostMemoryGB;
       size_t _minHostProcessingUnits;

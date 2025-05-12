@@ -7,6 +7,7 @@
 #include <hicr/frontends/RPCEngine/RPCEngine.hpp>
 #include <hicr/backends/pthreads/computeManager.hpp>
 #include <memory>
+#include <set>
 
 //// Enabling topology managers (to discover the system's hardware) based on the selected backends during compilation
 
@@ -107,6 +108,29 @@ class Engine
     virtual void finalize() = 0;
 
     __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
+    __INLINE__ size_t getRootInstanceIndex() const
+    { 
+      const auto& instances = _instanceManager->getInstances();
+      for (size_t i = 0; i < instances.size(); i++) if (instances[i]->isRootInstance()) return i;
+      return 0;
+    }
+
+    __INLINE__ void registerRPC(const std::string& RPCName, std::function<void()> fc)
+    {
+        // Registering RPC
+        auto RPCExecutionUnit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit([&](void*){fc();});
+
+        // Adding RPC
+        _rpcEngine->addRPCTarget(RPCName, RPCExecutionUnit);
+    }
+    
+    __INLINE__ void listenRPCs() { _rpcEngine->listen(); }
+    __INLINE__ void launchRPC(const size_t instanceIndex, const std::string& RPCName)
+    {
+        auto& instances = _instanceManager->getInstances();
+        auto& instance = instances[instanceIndex];
+        _rpcEngine->requestRPC(*instance, RPCName);
+    }
 
     protected: 
 
@@ -135,7 +159,7 @@ class Engine
 
     // Storage for the global system topology
     std::vector<HiCR::Topology> _globalTopology;
-    
+
     private:
 
     __INLINE__ HiCR::Topology detectLocalTopology()

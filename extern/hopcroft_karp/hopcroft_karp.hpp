@@ -85,6 +85,9 @@
      bool dfs(int u); // Adds augmenting path if there is one beginning with u  
      
      int hopcroftKarpAlgorithm();  // Returns size of maximum matching
+
+     const std::vector<int>& getLeftSidePairings() const { return pair_u; }
+     const std::vector<int>& getRightSidePairings()  const { return pair_v; }
  };
  
  

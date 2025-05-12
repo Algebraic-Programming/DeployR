@@ -7,6 +7,10 @@ int main(int argc, char* argv[])
     // Creating DeployR instance
     deployr::DeployR _deployr;
 
+    // Creating Functions
+    _deployr.registerFunction("CoordinatorFc", []() { printf("Hi, I am coordinator\n"); });
+    _deployr.registerFunction("WorkerFc", []() { printf("Hi, I am worker\n"); });
+
     // Initializing DeployR. Only one instance (root) continues from here
     _deployr.initialize(&argc, &argv);
 
@@ -29,7 +33,7 @@ int main(int argc, char* argv[])
     deployr::Request request(requestJs);
 
     // Deploying request, getting deployment
-    auto deployment = _deployr.deploy(request);
+    _deployr.deploy(request);
 
     // Finalize
     _deployr.finalize();
