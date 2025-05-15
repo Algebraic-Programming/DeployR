@@ -1,22 +1,20 @@
 {
     "Name": "LLM Deployment",
-    "Machines":
+
+    "Host Types":
     [
         {
-            "Name": "Coordinator",
-            "Replicas": 1,
-            "Function": "CoordinatorFc",
+            "Name": "Entry",
             "Topology":
             {
-                "Minimum Host Processing Units": 4,
-                "Minimum Host RAM (GB)": 16,
+                "Minimum Host Processing Units": 0,
+                "Minimum Host RAM (GB)": 0,
                 "Devices": [ ]
             }
         },
+
         {
-            "Name": "Worker",
-            "Replicas": 2,
-            "Function": "WorkerFc",
+            "Name": "Compute",
             "Topology":
             {
                 "Minimum Host Processing Units": 16,
@@ -29,6 +27,43 @@
                     }
                 ]
             }
+        }
+    ],
+
+    "Instances":
+    [
+        {
+            "Name": "Coordinator",
+            "Host Type": "Entry",
+            "Function": "CoordinatorFc"
+        },
+        {
+            "Name": "Worker 1",
+            "Host Type": "Compute",
+            "Function": "WorkerFc"
+        },
+        {
+            "Name": "Worker 2",
+            "Host Type": "Compute",
+            "Function": "WorkerFc"
+        }
+    ],
+
+    "Channels":
+    [
+        {
+            "Name": "Coordinator -> Worker 1",
+            "Producers": [ "Coordinator" ],
+            "Receiver": "Worker 1",
+            "Buffer Size (Tokens)": 8,
+            "Token Size (Bytes)": 1024 
+        },
+        {
+            "Name": "Coordinator -> Worker 2",
+            "Producers": [ "Coordinator" ],
+            "Receiver": "Worker 2",
+            "Buffer Size (Tokens)": 8,
+            "Token Size (Bytes)": 1024 
         }
     ]
 }

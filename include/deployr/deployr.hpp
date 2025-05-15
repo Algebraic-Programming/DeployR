@@ -62,12 +62,8 @@ class DeployR final
 
   __INLINE__ void deploy(Request& request)
   {
-    // Printing information before deploying
-    // printRequestInfo(request);
-
     // Counting the exact number of instances requested.
-    size_t instancesRequested = 0;
-    for (const auto& machine : request.getMachines()) instancesRequested += machine.getReplicas();
+    size_t instancesRequested = request.getInstances().size();
 
     // Getting the initial number of instances
     size_t initialInstanceCount = _engine->getInstanceCount();
@@ -114,15 +110,13 @@ class DeployR final
     // }
 
     // Building deployment object
-    for (const auto& machine : request.getMachines())
-      for (size_t i = 0; i < machine.getReplicas(); i++)
-       _deployment.addMachine(machine);
-    
-    for (const auto& topology : globalTopology)
-       _deployment.addResource(topology);
+    Deployment deployment(request);
+
+    // Adding hosts to the deployment object
+    for (size_t i = 0; i < globalTopology.size(); i++) deployment.addHost(Host(i, globalTopology[i]));
 
     // Proceed with request to instance matching
-    if (_deployment.performMatching() == false)
+    if (deployment.performMatching() == false)
     {
       fprintf(stderr, "[DeployR] The provided resources are not sufficient for the requested instances.\n");
       _engine->abort();
@@ -132,73 +126,45 @@ class DeployR final
     _rootInstanceIdx = _engine->getRootInstanceIndex();
     //printf("Root Instance Idx: %lu\n", _rootInstanceIdx);
 
-    // Getting pairings
-    auto pairings = _deployment.getPairings();
+    // Storage for the name of the initial function name for the root instance
+    std::string rootInstanceFcName;
 
-    // Launching initial function to each of the requested machines
-    size_t currentMachineIdx = 0;
-    for (const auto& machine : request.getMachines())
-      for (size_t i = 0; i < machine.getReplicas(); i++)
+    // Launching initial function to each of the requested instances
+    for (const auto& instance : deployment.getInstances())
+    {
+      // Getting the destination resource idx paired to this instance request
+      const auto hostIndex = instance.getAssignedHost().getHostIndex();
+
+      // Getting the function to run for the paired instance
+      const auto fcName = instance.getRequestedInstance().getFunction();
+      
+      // Checking the requested function was registered
+      if (_registeredFunctions.contains(fcName) == false)
       {
-        // Getting the destination resource idx paired to this machine request
-        const auto resourceIdx = pairings[currentMachineIdx];
-
-        // Getting the function to run for the paired machine
-        const auto fcName = machine.getFunction();
-        
-        // Checking the requested function was registered
-        if (_registeredFunctions.contains(fcName) == false)
-        {
-            fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", fcName.c_str());
-            abort();
-        } 
-        
-       
-        // Launching initial function in the destination instance
-        // If the resource index is the root instance, then don't send RPC. It will be executed manually
-        if (resourceIdx != _rootInstanceIdx)
-        {
-          // printf("Launching RPC: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
-          launchFunction(resourceIdx, machine.getFunction());
-        } 
-        else
-        {
-          // printf("Running Root: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
-          _rootInstanceMachine = machine;
-        } 
-
-        // Advancing current instance
-        currentMachineIdx++;
-      }
+          fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", fcName.c_str());
+          abort();
+      } 
+      
+      
+      // Launching initial function in the destination instance
+      // If the resource index is the root instance, then don't send RPC. It will be executed manually
+      if (hostIndex != _rootInstanceIdx)
+      {
+        // printf("Launching RPC: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
+        launchFunction(hostIndex, fcName);
+      } 
+      else
+      {
+        // printf("Running Root: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
+        rootInstanceFcName = fcName;
+      } 
+    }
 
     // The root instance runs its own function now
-    const auto& rootInstanceFcName = _rootInstanceMachine.getFunction();
     const auto& rootInstanceFc = _registeredFunctions[rootInstanceFcName];
+
     // printf("Root Function Name: %s\n", rootInstanceFcName.c_str());
     rootInstanceFc();
-  }
-
-  __INLINE__ void printRequestInfo(const Request& request)
-  {
-    printf("[DeployR] Request: '%s'\n", request.getName().c_str());
-    
-    const auto& machines = request.getMachines();
-    printf("[DeployR]   Machines: \n");
-    for (const auto& machine : machines)
-    {
-      printf("[DeployR]  + '%s'\n", machine.getName().c_str());
-      printf("[DeployR]    Replicas: %lu\n", machine.getReplicas());
-      printf("[DeployR]    Min Host Memory: %lu GB\n", machine.getMinHostMemoryGB());
-      printf("[DeployR]    Min Host Processing Units: %lu\n", machine.getMinHostProcessingUnits());
-      printf("[DeployR]    Devices: \n");
-
-      const auto& devices = machine.getDevices();
-      for (const auto& device : devices)
-      {
-        printf("[DeployR]      + Type: '%s'\n", device.getType().c_str());
-        printf("[DeployR]        Count: %lu\n", device.getCount());
-      }
-    }
   }
 
   __INLINE__ void registerFunction(const std::string& functionName, std::function<void()> fc)
@@ -233,11 +199,9 @@ class DeployR final
 
   bool _continueExecuting = true;
   std::unique_ptr<Engine> _engine;
-  Deployment _deployment;
 
   std::map<std::string, std::function<void()>> _registeredFunctions;
   size_t _rootInstanceIdx;
-  Request::Machine _rootInstanceMachine;
 
 }; // class DeployR
 

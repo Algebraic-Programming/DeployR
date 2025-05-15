@@ -3,6 +3,7 @@
 #include <hicr/core/definitions.hpp>
 #include <hopcroft_karp.hpp>
 #include "request.hpp"
+#include "host.hpp"
 
 namespace deployr 
 {
@@ -11,116 +12,87 @@ class Deployment final
 {
     public:
 
-    typedef size_t resourceIdx_t;
+    // Represents a deployed instance
+    class Instance final
+    {
+        public: 
 
-    Deployment() = default;
+        Instance(Request::Instance requestedInstance) : _requestedInstance(requestedInstance) {}
+
+        const Request::Instance& getRequestedInstance() const { return _requestedInstance; }
+        const Host& getAssignedHost() const { return _assignedHost; }
+        void setAssignedHost(const Host& assignedHost) { _assignedHost = assignedHost; }
+
+        private:
+
+        const Request::Instance _requestedInstance;
+        Host _assignedHost;
+    };
+
+    Deployment() = delete;
+    Deployment(Request request) : _request(request)
+    {
+        for (const auto& requestedInstance : _request.getInstances())
+            _instances.push_back(Instance(requestedInstance.second));
+    };
     ~Deployment() = default;
 
-    __INLINE__ void addMachine(const Request::Machine& machine) { _machines.push_back(machine); }
-    __INLINE__ void addResource(const HiCR::Topology& topology) { _resources.push_back(topology); }
+    __INLINE__ void addHost(const Host& host) { _hosts.push_back(host); }
 
     __INLINE__ bool performMatching()
     {
         // Building the matching graph
-        theAlgorithms::graph::HKGraph graph(_machines.size(), _resources.size());
-        for (size_t i = 0; i < _machines.size(); i++)
-            for (size_t j = 0; j < _resources.size(); j++)
-                if (checkCompatibility(_machines[i], _resources[j])) graph.addEdge(i, j);
+        theAlgorithms::graph::HKGraph graph(_instances.size(), _hosts.size());
+        for (size_t i = 0; i < _instances.size(); i++)
+            for (size_t j = 0; j < _hosts.size(); j++)
+            {
+                // Getting requested instance
+                const auto& requestedInstance = _instances[i].getRequestedInstance();
+
+                // Getting associated host type name
+                const auto& requestedHostTypeName = requestedInstance.getHostType();
+
+                // Getting actual host type object
+                const auto& requestedHostType = _request.getHostTypes().at(requestedHostTypeName);
+
+                // Checking if the requested host type is compatible with the current host.
+                // If so, add an edge to the graph
+                if (_hosts[j].checkCompatibility(requestedHostType)) graph.addEdge(i, j);
+            }
 
         //  Finding out if a proper matching exists
         auto matchCount = (size_t)graph.hopcroftKarpAlgorithm();
         //printf("Match Count: %d\n", matchCount);
 
         // If the number of matchings is smaller than requested, return false
-        if (matchCount < _machines.size()) return false;
+        if (matchCount < _instances.size()) return false;
 
         // Getting the pairings from the graph
-        _pairings.clear();
         const auto graphPairings = graph.getLeftSidePairings();
-        _pairings.resize(_machines.size());
-        for (size_t i = 1; i <= _machines.size(); i++)
+        for (size_t i = 0; i < _instances.size(); i++)
         {
-         auto machineIdx = i-1;
-         auto resourceIdx = (size_t)graphPairings[i];
-         //printf("Pairing: %lu -> %lu\n", machineIdx, resourceIdx);
-         _pairings[machineIdx] = resourceIdx;
+         auto hostIdx = (size_t)graphPairings[i+1];
+         printf("Pairing: %lu -> %lu\n", i, hostIdx);
+         _instances[i].setAssignedHost(_hosts[hostIdx]);
         }
          
         return true;
     }
 
-    const std::vector<resourceIdx_t>& getPairings() const { return _pairings; }
-    
+    __INLINE__ const std::vector<Host>& getHosts() const { return _hosts; }
+    __INLINE__ const std::vector<Instance>& getInstances() const { return _instances; }
+    __INLINE__ const Request& getRequest() const { return _request; }
+
     private: 
 
-    __INLINE__ bool checkCompatibility(const Request::Machine& machine, const HiCR::Topology& resource)
-    {
-        ////////// Checking whether the resource contains the minimum host memory
-        const auto minHostMemoryGB = machine.getMinHostMemoryGB();
+    // Request to fulfill
+    const Request _request;
 
-        // Looking for NUMA Domain device to add up to the actual memory
-        size_t actualHostMemoryBytes = 0;
-        for (const auto& device : resource.getDevices())
-            if (device->getType() == "NUMA Domain")
-                for (const auto& memorySpace : device->getMemorySpaceList())
-                    if (memorySpace->getType() == "RAM")
-                        actualHostMemoryBytes = memorySpace->getSize();
+    // The deployed instance vector
+    std::vector<Instance> _instances;
 
-        // Calculating GB
-        const size_t actualHostMemoryGB = actualHostMemoryBytes / (1024ul * 1024ul * 1024ul);       
-        
-        // Returning false if not enough host memory found
-        if (actualHostMemoryGB < minHostMemoryGB) return false;
-
-        ////////// Checking whether the resource contains the minimum processing units
-        const auto minHostProcessingUnits = machine.getMinHostProcessingUnits();
-
-        // Looking for NUMA Domain device to add up the number of processing units
-        size_t actualHostProcessingUnits = 0;
-        for (const auto& device : resource.getDevices())
-            if (device->getType() == "NUMA Domain")
-                for (const auto& computeResource : device->getComputeResourceList())
-                    if (computeResource->getType() == "Processing Unit")
-                        actualHostProcessingUnits++;
-
-        // Returning false if not enough processing units found
-        if (actualHostProcessingUnits < minHostProcessingUnits) return false;
-        // printf("Found %luGB - %lu PUs\n", actualHostMemoryGB, actualHostProcessingUnits);
-
-        ////////// Checking for requested devices
-        const auto requestedDevices = machine.getDevices();
-
-        for (const auto& requestedDevice : requestedDevices)
-        {
-            const auto requestedDeviceType = requestedDevice.getType();
-            const auto requestedDeviceCount = requestedDevice.getCount();
-
-            // Looking for NUMA Domain device to add up the number of processing units
-            size_t actualDeviceCount = 0;
-            for (const auto& device : resource.getDevices())
-            {
-                // printf("Comparing %s to %s\n", device->getType().c_str(), requestedDeviceType.c_str());
-                if (device->getType() == requestedDeviceType)
-                    actualDeviceCount++;
-            }
-            // printf("Actual device Count: %lu\n", actualDeviceCount);
-            // Failing if the require device count hasn't been met                     
-            if (actualDeviceCount < requestedDeviceCount) return false;
-        }
-
-        // All requirements have been met, returning true
-        //printf("Requirements met\n");
-        return true;
-    }
-
-    // Requested machines
-    std::vector<Request::Machine> _machines;
-
-    // Provided resources
-    std::vector<HiCR::Topology> _resources;
-
-    // Pairings
-    std::vector<resourceIdx_t> _pairings;
+    // Provided hosts
+    std::vector<Host> _hosts;
     
 }; // class Deployment
 
