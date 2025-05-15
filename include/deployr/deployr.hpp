@@ -63,7 +63,7 @@ class DeployR final
   __INLINE__ void deploy(Request& request)
   {
     // Printing information before deploying
-    printRequestInfo(request);
+    // printRequestInfo(request);
 
     // Counting the exact number of instances requested.
     size_t instancesRequested = 0;
@@ -73,8 +73,8 @@ class DeployR final
     size_t initialInstanceCount = _engine->getInstanceCount();
 
     // Printing instance count information
-    printf("[DeployR] Initial Instances:   %lu\n", initialInstanceCount);
-    printf("[DeployR] Requested Instances: %lu\n", instancesRequested);
+    // printf("[DeployR] Initial Instances:   %lu\n", initialInstanceCount);
+    // printf("[DeployR] Requested Instances: %lu\n", instancesRequested);
 
     // We handle the following scenarios:
     // With N: number of requested instances
@@ -130,7 +130,7 @@ class DeployR final
 
     // Getting root instance index
     _rootInstanceIdx = _engine->getRootInstanceIndex();
-    printf("Root Instance Idx: %lu\n", _rootInstanceIdx);
+    //printf("Root Instance Idx: %lu\n", _rootInstanceIdx);
 
     // Getting pairings
     auto pairings = _deployment.getPairings();
@@ -158,12 +158,12 @@ class DeployR final
         // If the resource index is the root instance, then don't send RPC. It will be executed manually
         if (resourceIdx != _rootInstanceIdx)
         {
-          printf("Launching RPC: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
+          // printf("Launching RPC: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
           launchFunction(resourceIdx, machine.getFunction());
         } 
         else
         {
-          printf("Running Root: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
+          // printf("Running Root: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
           _rootInstanceMachine = machine;
         } 
 

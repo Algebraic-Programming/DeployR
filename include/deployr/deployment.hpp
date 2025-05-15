@@ -37,12 +37,13 @@ class Deployment final
         // Getting the pairings from the graph
         _pairings.clear();
         const auto graphPairings = graph.getLeftSidePairings();
+        _pairings.resize(_machines.size());
         for (size_t i = 1; i <= _machines.size(); i++)
         {
          auto machineIdx = i-1;
          auto resourceIdx = (size_t)graphPairings[i];
-         printf("Pairing: %lu -> %lu\n", machineIdx, resourceIdx);
-         _pairings.push_back(resourceIdx);
+         //printf("Pairing: %lu -> %lu\n", machineIdx, resourceIdx);
+         _pairings[machineIdx] = resourceIdx;
         }
          
         return true;

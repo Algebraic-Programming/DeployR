@@ -118,7 +118,7 @@ class Engine
     __INLINE__ void registerRPC(const std::string& RPCName, std::function<void()> fc)
     {
         // Registering RPC
-        auto RPCExecutionUnit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit([&](void*){fc();});
+        auto RPCExecutionUnit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit([fc](void*){fc();});
 
         // Adding RPC
         _rpcEngine->addRPCTarget(RPCName, RPCExecutionUnit);
