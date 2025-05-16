@@ -105,7 +105,7 @@ class DeployR final
     // for (size_t i = 0; i < globalTopology.size(); i++)
     // {
       // printf("Instance: %lu\n", i);
-      //printf("%s\n", globalTopology[i].serialize().dump(2).c_str());
+      //printf("%s\n", globalTopology[i].dump(2).c_str());
       //printf("--------\n");
     // }
 
@@ -172,7 +172,7 @@ class DeployR final
     // printf("Root Function Name: %s\n", rootInstanceFcName.c_str());
     rootInstanceFc();
 
-    printf("%s\n", deployment.serialize().dump(2).c_str());
+    printf("Deployment Size: %lu (binary: %lu)", deployment.serialize().dump().size(), nlohmann::json::to_cbor(deployment.serialize()).size());
   }
 
   __INLINE__ void registerFunction(const std::string& functionName, std::function<void()> fc)

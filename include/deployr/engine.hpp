@@ -87,15 +87,15 @@ class Engine
         _rpcEngine->initialize();
 
         // Registering topology exchanging RPC
-        auto getTopologyExecutionunit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit([this](void*)
+        auto getTopologyFc = [this]()
         {
             // Serializing
             const auto serializedTopology = _localTopology.dump();
 
             // Returning serialized topology
             _rpcEngine->submitReturnValue((void*)serializedTopology.c_str(), serializedTopology.size());
-        });
-        _rpcEngine->addRPCTarget(__DEPLOYR_TOPOLOGY_RPC_NAME, getTopologyExecutionunit);
+        };
+        registerRPC(__DEPLOYR_TOPOLOGY_RPC_NAME, getTopologyFc);
 
         // Gathering global topology into the root instance
         _globalTopology = gatherGlobalTopology();
