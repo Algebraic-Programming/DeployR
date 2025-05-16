@@ -100,7 +100,7 @@ class Request final
       std::string _hostType;
     }; // class Instance
 
-    Request() = delete;
+    Request() = default;
     ~Request() = default;
 
     Request(const nlohmann::json& requestJs) : _requestJs(requestJs)
@@ -165,7 +165,7 @@ class Request final
 
     private: 
 
-    const nlohmann::json _requestJs;
+    nlohmann::json _requestJs;
     std::string _name;
     std::map<std::string, HostType> _hostTypes;
     std::map<std::string, Instance> _instances;

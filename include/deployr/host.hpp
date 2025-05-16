@@ -11,7 +11,7 @@ class Host final
     public:
 
     Host() = default;
-    Host(const size_t hostIndex, const HiCR::Topology& topology) : _hostIndex(hostIndex), _topology(topology) {}
+    Host(const size_t hostIndex, const nlohmann::json& topology) : _hostIndex(hostIndex), _topology(topology) {}
     ~Host() = default;
 
     __INLINE__ bool checkCompatibility(const Request::HostType& request)
@@ -19,13 +19,28 @@ class Host final
         ////////// Checking whether the _topology contains the minimum host memory
         const auto minHostMemoryGB = request.getMinMemoryGB();
 
+        // Getting topology's devices
+        const auto& devices = hicr::json::getArray<nlohmann::json>(_topology, "Devices");
+
         // Looking for NUMA Domain device to add up to the actual memory
         size_t actualHostMemoryBytes = 0;
-        for (const auto& device : _topology.getDevices())
-            if (device->getType() == "NUMA Domain")
-                for (const auto& memorySpace : device->getMemorySpaceList())
-                    if (memorySpace->getType() == "RAM")
-                        actualHostMemoryBytes = memorySpace->getSize();
+        for (const auto& device : devices)
+        {
+            const auto& deviceType = hicr::json::getString(device, "Type");
+            if (deviceType == "NUMA Domain")
+            {
+                const auto& memorySpaces = hicr::json::getArray<nlohmann::json>(device, "Memory Spaces");
+                for (const auto& memorySpace : memorySpaces)
+                {
+                    const auto& memorySpaceType = hicr::json::getString(memorySpace, "Type");
+                    if (memorySpaceType == "RAM")
+                    {
+                        const auto& memorySpaceSize = hicr::json::getNumber<size_t>(memorySpace, "Size");
+                        actualHostMemoryBytes = memorySpaceSize;
+                    }
+                }
+            }
+        }
 
         // Calculating GB
         const size_t actualHostMemoryGB = actualHostMemoryBytes / (1024ul * 1024ul * 1024ul);       
@@ -38,11 +53,19 @@ class Host final
 
         // Looking for NUMA Domain device to add up the number of processing units
         size_t actualHostProcessingUnits = 0;
-        for (const auto& device : _topology.getDevices())
-            if (device->getType() == "NUMA Domain")
-                for (const auto& computeResource : device->getComputeResourceList())
-                    if (computeResource->getType() == "Processing Unit")
-                        actualHostProcessingUnits++;
+        for (const auto& device : devices)
+        {
+            const auto& deviceType = hicr::json::getString(device, "Type");
+            if (deviceType == "NUMA Domain")
+            {
+                const auto& computeResources = hicr::json::getArray<nlohmann::json>(device, "Compute Resources");
+                for (const auto& computeResource : computeResources)
+                {
+                    const auto& computeResourceType = hicr::json::getString(computeResource, "Type");
+                    if (computeResourceType == "Processing Unit") actualHostProcessingUnits++;
+                }
+            }
+        }
 
         // Returning false if not enough processing units found
         if (actualHostProcessingUnits < minHostProcessingUnits) return false;
@@ -58,12 +81,14 @@ class Host final
 
             // Looking for NUMA Domain device to add up the number of processing units
             size_t actualDeviceCount = 0;
-            for (const auto& device : _topology.getDevices())
+            for (const auto& device : devices)
             {
+                const auto& deviceType = hicr::json::getString(device, "Type");
+
                 // printf("Comparing %s to %s\n", device->getType().c_str(), requestedDeviceType.c_str());
-                if (device->getType() == requestedDeviceType)
-                    actualDeviceCount++;
+                if (deviceType == requestedDeviceType) actualDeviceCount++;
             }
+
             // printf("Actual device Count: %lu\n", actualDeviceCount);
             // Failing if the require device count hasn't been met                     
             if (actualDeviceCount < requestedDeviceCount) return false;
@@ -75,7 +100,7 @@ class Host final
     }
 
     const size_t getHostIndex() const { return _hostIndex; }
-    const HiCR::Topology& getTopology() const { return _topology; }
+    const nlohmann::json& getTopology() const { return _topology; }
 
     __INLINE__ nlohmann::json serialize() const
     {
@@ -86,9 +111,16 @@ class Host final
         hostJs["Host Index"] = _hostIndex;
 
         // Serializing request
-        hostJs["Topology"] = _topology.serialize();
+        hostJs["Topology"] = _topology;
 
         return hostJs;
+    }
+
+    Host(const nlohmann::json& hostJs)
+    {
+        // Deserializing information
+        _hostIndex = hicr::json::getNumber<size_t>(hostJs, "Host Index");
+        _topology = hicr::json::getObject(hostJs, "Topology");
     }
 
     private: 
@@ -96,8 +128,8 @@ class Host final
     // Index of the corresponding host within the instance manager's instance vector
     size_t _hostIndex;
 
-    // Host's actual topology
-    HiCR::Topology _topology;
+    // Host's actual topology, in JSON format
+    nlohmann::json _topology;
 
 }; // class Host
 

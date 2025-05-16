@@ -38,10 +38,16 @@ class Deployment final
             return instanceJs;
         }
 
+        Pairing(const nlohmann::json& pairingJs)
+        {
+            // Deserializing pairing information
+            _requestedInstanceName = hicr::json::getString(pairingJs, "Requested Instance Name");
+            _assignedHostIndex = hicr::json::getNumber<size_t>(pairingJs, "Assigned Host Index");
+        }
 
         private:
 
-        const std::string _requestedInstanceName;
+        std::string _requestedInstanceName;
         size_t _assignedHostIndex;
     };
 
@@ -128,13 +134,26 @@ class Deployment final
         return deploymentJs;
     }
 
+    Deployment(const nlohmann::json& deploymentJs)
+    {
+        // Deserializing information
+        _deployStartTime = hicr::json::getString(deploymentJs, "Deployment Start Time");
+        _request = Request(hicr::json::getObject(deploymentJs, "Request"));
+
+        const auto& pairingsJs = hicr::json::getArray<nlohmann::json>(deploymentJs, "Pairings");
+        for (const auto& pairingJs : pairingsJs) _pairings.push_back(Pairing(pairingJs));
+
+        const auto& hostsJs = hicr::json::getArray<nlohmann::json>(deploymentJs, "Hosts");
+        for (const auto& hostJs : hostsJs) _hosts.push_back(Host(hostJs));
+    }
+
     private: 
 
     // Time that the deployment started at the root instance
     std::string _deployStartTime;
 
     // Request to fulfill
-    const Request _request;
+    Request _request;
 
     // The pairings vector
     std::vector<Pairing> _pairings;

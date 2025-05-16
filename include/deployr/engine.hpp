@@ -90,7 +90,7 @@ class Engine
         auto getTopologyExecutionunit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit([this](void*)
         {
             // Serializing
-            const auto serializedTopology = _localTopology.serialize().dump();
+            const auto serializedTopology = _localTopology.dump();
 
             // Returning serialized topology
             _rpcEngine->submitReturnValue((void*)serializedTopology.c_str(), serializedTopology.size());
@@ -101,8 +101,8 @@ class Engine
         _globalTopology = gatherGlobalTopology();
     };
 
-    __INLINE__ const HiCR::Topology& getLocalTopology() const { return _localTopology; }
-    __INLINE__ const std::vector<HiCR::Topology>& getGlobalTopology() const { return _globalTopology; }
+    __INLINE__ const nlohmann::json& getLocalTopology() const { return _localTopology; }
+    __INLINE__ const std::vector<nlohmann::json>& getGlobalTopology() const { return _globalTopology; }
 
     virtual void abort() = 0;
     virtual void finalize() = 0;
@@ -155,14 +155,14 @@ class Engine
     std::unique_ptr<HiCR::frontend::RPCEngine> _rpcEngine;
 
     // Storage for the local system topology
-    HiCR::Topology _localTopology;
+    nlohmann::json _localTopology;
 
     // Storage for the global system topology
-    std::vector<HiCR::Topology> _globalTopology;
+    std::vector<nlohmann::json> _globalTopology;
 
     private:
 
-    __INLINE__ HiCR::Topology detectLocalTopology()
+    __INLINE__ nlohmann::json detectLocalTopology()
     {
         // Storage for the machine's topology
         HiCR::Topology topology;
@@ -178,13 +178,13 @@ class Engine
         }
 
         // Returning merged topology
-        return topology;
+        return topology.serialize();
     }
 
-    __INLINE__ std::vector<HiCR::Topology> gatherGlobalTopology()
+    __INLINE__ std::vector<nlohmann::json> gatherGlobalTopology()
     {
         // Storage
-        std::vector<HiCR::Topology> globalTopology;
+        std::vector<nlohmann::json> globalTopology;
 
         // If I am not root, listen for the incoming RPC and return an empty topology
         if (isRootInstance() == false) _rpcEngine->listen(); 
@@ -192,8 +192,10 @@ class Engine
         // If I am root, request topology from all instances
         else
          for (const auto& instance : _instanceManager->getInstances())
+
             // If its the root instance (me), just push my local topology
             if (instance->isRootInstance() == true) globalTopology.push_back(_localTopology);
+
             // If not, it's another instance: send RPC and deserialize return value
             else
             {
@@ -212,18 +214,8 @@ class Engine
                 // Freeing return value
                 _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
 
-                // HiCR topology object to obtain
-                HiCR::Topology topology;
-
-                // Obtaining the topology from the serialized object
-                topology.merge(HiCR::backend::hwloc::TopologyManager::deserializeTopology(topologyJson));
-
-                #ifdef _HICR_USE_ASCEND_BACKEND_
-                topology.merge(HiCR::backend::ascend::TopologyManager::deserializeTopology(topologyJson));
-                #endif // _HICR_USE_ASCEND_BACKEND_
-
                 // Pushing topology into the vector
-                globalTopology.push_back(topology);
+                globalTopology.push_back(topologyJson);
             }
         
         // Return global topology
