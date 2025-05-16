@@ -77,6 +77,20 @@ class Host final
     const size_t getHostIndex() const { return _hostIndex; }
     const HiCR::Topology& getTopology() const { return _topology; }
 
+    __INLINE__ nlohmann::json serialize() const
+    {
+        // Creating host JSON object
+        nlohmann::json hostJs;
+
+        // Getting deployment time
+        hostJs["Host Index"] = _hostIndex;
+
+        // Serializing request
+        hostJs["Topology"] = _topology.serialize();
+
+        return hostJs;
+    }
+
     private: 
 
     // Index of the corresponding host within the instance manager's instance vector

@@ -4,6 +4,7 @@
 #include <hopcroft_karp.hpp>
 #include "request.hpp"
 #include "host.hpp"
+#include "common.hpp"
 
 namespace deployr 
 {
@@ -12,28 +13,47 @@ class Deployment final
 {
     public:
 
-    // Represents a deployed instance
-    class Instance final
+    // Represents a pairing
+    class Pairing final
     {
         public: 
 
-        Instance(Request::Instance requestedInstance) : _requestedInstance(requestedInstance) {}
+        Pairing(const std::string& requestedInstanceName) : _requestedInstanceName(requestedInstanceName) {}
 
-        const Request::Instance& getRequestedInstance() const { return _requestedInstance; }
-        const Host& getAssignedHost() const { return _assignedHost; }
-        void setAssignedHost(const Host& assignedHost) { _assignedHost = assignedHost; }
+        const std::string& getRequestedInstanceName() const { return _requestedInstanceName; }
+        const size_t& getAssignedHostIndex() const { return _assignedHostIndex; }
+        void setAssignedHostIndex(const size_t& assignedHostIndex) { _assignedHostIndex = assignedHostIndex; }
+
+        __INLINE__ nlohmann::json serialize() const
+        {
+            // Creating deployement instance's JSON object
+            nlohmann::json instanceJs;
+    
+            // Getting deployment time
+            instanceJs["Requested Instance Name"] = _requestedInstanceName;
+
+            // Serializing Host information
+            instanceJs["Assigned Host Index"] = _assignedHostIndex;
+
+            return instanceJs;
+        }
+
 
         private:
 
-        const Request::Instance _requestedInstance;
-        Host _assignedHost;
+        const std::string _requestedInstanceName;
+        size_t _assignedHostIndex;
     };
 
     Deployment() = delete;
     Deployment(Request request) : _request(request)
     {
+        // Setting start time at the creation of this object
+        _deployStartTime = getCurrentDateTime();
+
+        // Creating one deployment instance per requested instance
         for (const auto& requestedInstance : _request.getInstances())
-            _instances.push_back(Instance(requestedInstance.second));
+            _pairings.push_back(Pairing(requestedInstance.second.getName()));
     };
     ~Deployment() = default;
 
@@ -42,12 +62,15 @@ class Deployment final
     __INLINE__ bool performMatching()
     {
         // Building the matching graph
-        theAlgorithms::graph::HKGraph graph(_instances.size(), _hosts.size());
-        for (size_t i = 0; i < _instances.size(); i++)
+        theAlgorithms::graph::HKGraph graph(_pairings.size(), _hosts.size());
+        for (size_t i = 0; i < _pairings.size(); i++)
             for (size_t j = 0; j < _hosts.size(); j++)
             {
-                // Getting requested instance
-                const auto& requestedInstance = _instances[i].getRequestedInstance();
+                // Getting requested instance's name
+                const auto& requestedInstanceName = _pairings[i].getRequestedInstanceName();
+
+                // Getting requested instance's information
+                const auto& requestedInstance = _request.getInstances().at(requestedInstanceName);
 
                 // Getting associated host type name
                 const auto& requestedHostTypeName = requestedInstance.getHostType();
@@ -65,31 +88,56 @@ class Deployment final
         //printf("Match Count: %d\n", matchCount);
 
         // If the number of matchings is smaller than requested, return false
-        if (matchCount < _instances.size()) return false;
+        if (matchCount < _pairings.size()) return false;
 
         // Getting the pairings from the graph
         const auto graphPairings = graph.getLeftSidePairings();
-        for (size_t i = 0; i < _instances.size(); i++)
+        for (size_t i = 0; i < _pairings.size(); i++)
         {
          auto hostIdx = (size_t)graphPairings[i+1];
-         printf("Pairing: %lu -> %lu\n", i, hostIdx);
-         _instances[i].setAssignedHost(_hosts[hostIdx]);
+         //printf("Pairing: %lu -> %lu\n", i, hostIdx);
+         _pairings[i].setAssignedHostIndex(hostIdx);
         }
          
         return true;
     }
 
     __INLINE__ const std::vector<Host>& getHosts() const { return _hosts; }
-    __INLINE__ const std::vector<Instance>& getInstances() const { return _instances; }
+    __INLINE__ const std::vector<Pairing>& getPairings() const { return _pairings; }
     __INLINE__ const Request& getRequest() const { return _request; }
 
+    __INLINE__ nlohmann::json serialize() const
+    {
+        // Creating deployment JSON object
+        nlohmann::json deploymentJs;
+
+        // Getting deployment time
+        deploymentJs["Deployment Start Time"] = _deployStartTime;
+
+        // Serializing request
+        deploymentJs["Request"] = _request.serialize();
+
+        // Serializing pairings information
+        for (size_t i = 0; i < _pairings.size(); i++)
+            deploymentJs["Pairings"][i] = _pairings[i].serialize();
+
+        // Serializing host information
+        for (size_t i = 0; i < _hosts.size(); i++)
+            deploymentJs["Hosts"][i] = _hosts[i].serialize();
+
+        return deploymentJs;
+    }
+
     private: 
+
+    // Time that the deployment started at the root instance
+    std::string _deployStartTime;
 
     // Request to fulfill
     const Request _request;
 
-    // The deployed instance vector
-    std::vector<Instance> _instances;
+    // The pairings vector
+    std::vector<Pairing> _pairings;
 
     // Provided hosts
     std::vector<Host> _hosts;

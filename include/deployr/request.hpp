@@ -103,7 +103,7 @@ class Request final
     Request() = delete;
     ~Request() = default;
 
-    Request(const nlohmann::json& requestJs) 
+    Request(const nlohmann::json& requestJs) : _requestJs(requestJs)
     {
       // Parsing name
       _name = hicr::json::getString(requestJs, "Name");
@@ -157,8 +157,15 @@ class Request final
     __INLINE__ const std::map<std::string, Instance>& getInstances() const { return _instances; }
     __INLINE__ const std::string& getName() const { return _name; }
 
+    __INLINE__ nlohmann::json serialize() const
+    {
+        // Since this is a static object, simply return originating JSON
+        return _requestJs;
+    }
+
     private: 
 
+    const nlohmann::json _requestJs;
     std::string _name;
     std::map<std::string, HostType> _hostTypes;
     std::map<std::string, Instance> _instances;

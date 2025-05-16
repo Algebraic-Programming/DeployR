@@ -130,13 +130,19 @@ class DeployR final
     std::string rootInstanceFcName;
 
     // Launching initial function to each of the requested instances
-    for (const auto& instance : deployment.getInstances())
+    for (const auto& pairing : deployment.getPairings())
     {
       // Getting the destination resource idx paired to this instance request
-      const auto hostIndex = instance.getAssignedHost().getHostIndex();
+      const auto hostIndex = pairing.getAssignedHostIndex();
+
+      // Getting requested instance's name
+      const auto& requestedInstanceName = pairing.getRequestedInstanceName();
+
+      // Getting requested instance's information
+      const auto& requestedInstance = request.getInstances().at(requestedInstanceName);
 
       // Getting the function to run for the paired instance
-      const auto fcName = instance.getRequestedInstance().getFunction();
+      const auto fcName = requestedInstance.getFunction();
       
       // Checking the requested function was registered
       if (_registeredFunctions.contains(fcName) == false)
@@ -165,6 +171,8 @@ class DeployR final
 
     // printf("Root Function Name: %s\n", rootInstanceFcName.c_str());
     rootInstanceFc();
+
+    printf("%s\n", deployment.serialize().dump(2).c_str());
   }
 
   __INLINE__ void registerFunction(const std::string& functionName, std::function<void()> fc)
