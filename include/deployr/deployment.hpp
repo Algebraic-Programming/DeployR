@@ -51,7 +51,7 @@ class Deployment final
         size_t _assignedHostIndex;
     };
 
-    Deployment() = delete;
+    Deployment() = default;
     Deployment(Request request) : _request(request)
     {
         // Setting start time at the creation of this object
