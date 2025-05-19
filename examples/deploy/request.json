@@ -54,14 +54,14 @@
         {
             "Name": "Coordinator -> Worker 1",
             "Producers": [ "Coordinator" ],
-            "Receiver": "Worker 1",
+            "Consumer": "Worker 1",
             "Buffer Size (Tokens)": 8,
             "Token Size (Bytes)": 1024 
         },
         {
             "Name": "Coordinator -> Worker 2",
             "Producers": [ "Coordinator" ],
-            "Receiver": "Worker 2",
+            "Consumer": "Worker 2",
             "Buffer Size (Tokens)": 8,
             "Token Size (Bytes)": 1024 
         }

@@ -10,6 +10,45 @@ class Request final
 {
     public:
 
+    class Channel
+    {
+      public: 
+
+      Channel() = delete;
+      ~Channel() = default;
+      Channel(const nlohmann::json& channelJs)
+      {
+        // Parsing channel name
+        _name = hicr::json::getString(channelJs, "Name");
+
+        // Parsing producers
+        _producers = hicr::json::getArray<std::string>(channelJs, "Producers");
+
+        // Parsing consumer
+        _consumer = hicr::json::getString(channelJs, "Consumer");
+
+        // Parsing buffer size (in tokens)
+        _bufferSize = hicr::json::getNumber<size_t>(channelJs, "Buffer Size (Tokens)");
+
+        // Parsing buffer size (in tokens)
+        _tokenSize = hicr::json::getNumber<size_t>(channelJs, "Token Size (Bytes)");
+      }
+
+      __INLINE__ const std::string& getName() const { return _name; }
+      __INLINE__ const std::vector<std::string>& getProducers() const { return _producers; }
+      __INLINE__ const std::string& getConsumer() const { return _consumer; }
+      __INLINE__ const size_t getBufferSize() const { return _bufferSize; }
+      __INLINE__ const size_t getTokenSize() const { return _tokenSize; }
+
+      private:
+
+      std::string _name;
+      std::vector<std::string> _producers;
+      std::string _consumer;
+      size_t _bufferSize;
+      size_t _tokenSize;
+    }; // class Channel
+
     class HostType final 
     {
       public:
@@ -151,6 +190,19 @@ class Request final
         // If not repeated, push the new host type
         _instances.insert({instanceName, instance});
       }
+
+      // Getting channels entry
+      const auto& channelsJs = hicr::json::getArray<nlohmann::json>(requestJs, "Channels");
+
+      // Parsing individual channels
+      for (const auto& channelJs : channelsJs)
+      {
+        // Creating instance object
+        const auto channel = Channel(channelJs);
+
+        // If not repeated, push the new host type
+        _channels.push_back(channel);
+      }
     }
 
     __INLINE__ const std::map<std::string, HostType>& getHostTypes() const { return _hostTypes; }
@@ -169,6 +221,7 @@ class Request final
     std::string _name;
     std::map<std::string, HostType> _hostTypes;
     std::map<std::string, Instance> _instances;
+    std::vector<Channel> _channels;
 
 }; // class Request
 

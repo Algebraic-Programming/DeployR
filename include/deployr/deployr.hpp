@@ -283,6 +283,11 @@ class DeployR final
   __INLINE__ void createChannels()
   {
     printf("Create Channels (%lu)\n", _localHostIndex);
+
+    // Getting original request
+    const auto& request = _deployment.getRequest();
+
+    // Getting set of channels
   }
 
   __INLINE__ void runInitialFunction()
