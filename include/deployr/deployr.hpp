@@ -5,6 +5,8 @@
 #include <hicr/core/definitions.hpp>
 #include <nlohmann_json/json.hpp>
 #include <nlohmann_json/parser.hpp>
+#include <algorithm>
+#include <vector>
 #include "engine.hpp"
 #include "request.hpp"
 #include "deployment.hpp"
@@ -85,6 +87,9 @@ class DeployR final
       _deployment = broadcastDeployment();
       //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
 
+      // Identifying local instance
+      identifyLocalInstance();
+
       // Creating communication channels
       createChannels();
 
@@ -160,6 +165,9 @@ class DeployR final
 
     // Broadcasting deployment information to non-root instances
     broadcastDeployment();
+
+    // Identifying this local instance
+    identifyLocalInstance();
 
     // Creating communication channels
     createChannels();
@@ -287,26 +295,58 @@ class DeployR final
     // Getting original request
     const auto& request = _deployment.getRequest();
 
-    // Getting set of channels
+    // Getting set of channels from request
+    const auto& channels = request.getChannels();
+
+    // Creating each channel
+    for (size_t i = 0; i < channels.size(); i++)
+    {
+      // Gettting reference to the current channel
+      const auto& channel = channels[i];
+
+      // Getting channel's name
+      const auto& name = channel.getName();
+
+      // Getting channel's producers
+      const auto& producers = channel.getProducers();
+
+      // Getting channel's consumer
+      const auto& consumer = channel.getConsumer();
+
+      // Check if this machine is involved in communication
+      bool isRelevantChannel = false;
+      if (std::find(producers.begin(), producers.end(), _localInstanceName) != producers.end()) isRelevantChannel = true;
+      if (channel.getConsumer() == _localInstanceName) isRelevantChannel = true;
+
+      // Getting channel unique id (required as a tag by HiCR channels)
+      const auto channelId = i;
+      if (isRelevantChannel) printf("Instance '%s' - Creating channel %lu '%s'\n", _localInstanceName.c_str(), channelId, channels[i].getName().c_str());
+      
+      // Creating channel object
+      const auto channelObject = _engine->createChannel(channelId, name, {}, 0, 0, 0);
+    }
+  }
+
+  __INLINE__ void identifyLocalInstance()
+  {
+        // Getting pairings
+        const auto& pairings = _deployment.getPairings();
+
+        // Finding the pairing corresponding to this host
+        deployr::Deployment::Pairing pairing;
+        for (const auto& p : pairings) if (p.getAssignedHostIndex() == _localHostIndex) { pairing = p; break; }
+    
+        // Getting requested instance's name
+        _localInstanceName = pairing.getRequestedInstanceName();
+    
+        // Getting requested instance's information
+        _localInstance = _deployment.getRequest().getInstances().at(_localInstanceName);
   }
 
   __INLINE__ void runInitialFunction()
   {
-    // Getting pairings
-    const auto& pairings = _deployment.getPairings();
-
-    // Finding the pairing corresponding to this host
-    deployr::Deployment::Pairing pairing;
-    for (const auto& p : pairings) if (p.getAssignedHostIndex() == _localHostIndex) { pairing = p; break; }
-
-    // Getting requested instance's name
-    const auto& requestedInstanceName = pairing.getRequestedInstanceName();
-
-    // Getting requested instance's information
-    const auto& requestedInstance = _deployment.getRequest().getInstances().at(requestedInstanceName);
-
     // Getting the function to run for the paired instance
-    const auto fcName = requestedInstance.getFunction();
+    const auto fcName = _localInstance.getFunction();
     
     // Checking the requested function was registered
     if (_registeredFunctions.contains(fcName) == false)
@@ -327,6 +367,12 @@ class DeployR final
 
   std::map<std::string, std::function<void()>> _registeredFunctions;
   
+  // Instance that this host will be running
+  std::string _localInstanceName;
+
+  // Local instance object
+  Request::Instance _localInstance;
+
   // Index of this host on the deployment
   size_t _localHostIndex;
 
@@ -335,6 +381,9 @@ class DeployR final
 
   // Storage for the global system topology
   std::vector<nlohmann::json> _globalTopology;
+
+  // Map of channels
+  std::map<std::string, std::shared_ptr<Channel>> _channels;
 
   Deployment _deployment;
 }; // class DeployR

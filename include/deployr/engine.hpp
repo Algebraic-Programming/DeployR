@@ -6,6 +6,7 @@
 #include <hicr/core/computeManager.hpp>
 #include <hicr/frontends/RPCEngine/RPCEngine.hpp>
 #include <hicr/backends/pthreads/computeManager.hpp>
+#include "channel.hpp"
 #include <memory>
 #include <set>
 
@@ -130,6 +131,18 @@ class Engine
         auto& instance = instances[instanceIndex];
         _rpcEngine->requestRPC(*instance, RPCName);
     }
+
+    __INLINE__ std::shared_ptr<Channel> createChannel(
+        const Channel::channelId_t channelId,
+        const std::string name,
+        const std::vector<size_t> producerIdxs,
+        const size_t consumerIdx,
+        const size_t bufferSize,
+        const size_t tokenSize)
+        {
+            auto channel = std::make_shared<Channel>(channelId);
+            return channel;
+        }
 
     __INLINE__ void submitRPCReturnValue(void* buffer, const size_t size) { _rpcEngine->submitReturnValue(buffer, size); }
     __INLINE__ std::shared_ptr<HiCR::LocalMemorySlot> getRPCReturnValue(HiCR::Instance &instance) const {  return _rpcEngine->getReturnValue(instance); }

@@ -114,7 +114,7 @@ class Request final
     {
       public: 
 
-      Instance() = delete;
+      Instance() = default;
       ~Instance() = default;
       Instance(const nlohmann::json& instanceJs)
       {
@@ -207,6 +207,7 @@ class Request final
 
     __INLINE__ const std::map<std::string, HostType>& getHostTypes() const { return _hostTypes; }
     __INLINE__ const std::map<std::string, Instance>& getInstances() const { return _instances; }
+    __INLINE__ const std::vector<Channel>& getChannels() const { return _channels; }
     __INLINE__ const std::string& getName() const { return _name; }
 
     __INLINE__ nlohmann::json serialize() const
