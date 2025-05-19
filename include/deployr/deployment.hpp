@@ -18,6 +18,7 @@ class Deployment final
     {
         public: 
 
+        Pairing() = default;
         Pairing(const std::string& requestedInstanceName) : _requestedInstanceName(requestedInstanceName) {}
 
         const std::string& getRequestedInstanceName() const { return _requestedInstanceName; }

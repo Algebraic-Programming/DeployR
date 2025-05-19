@@ -66,6 +66,9 @@ class DeployR final
     // Initializing distributed execution engine
     _engine->initialize(pargc, pargv);
 
+    // Getting local host index among all HiCR instances
+    _localHostIndex = _engine->getLocalInstanceIndex();
+
     // Committing rpcs to the engine
     for (const auto& rpc : _registeredFunctions) _engine->registerRPC(rpc.first, rpc.second);
 
@@ -80,10 +83,13 @@ class DeployR final
     {
       // Getting deployment information from the root instance
       _deployment = broadcastDeployment();
-      printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
-      
-      // Listening for an incoming RPC
-      _engine->listenRPCs();
+      //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
+
+      // Creating communication channels
+      createChannels();
+
+      // Running initial function assigned to this host
+      runInitialFunction();
 
       // Only a single user-defined RPC shall be executed by a non-root instance
       _engine->finalize();
@@ -152,60 +158,14 @@ class DeployR final
       _engine->abort();
     } 
 
-    // Getting root instance index
-    _rootInstanceIdx = _engine->getRootInstanceIndex();
-    //printf("Root Instance Idx: %lu\n", _rootInstanceIdx);
-
-    // Storage for the name of the initial function name for the root instance
-    std::string rootInstanceFcName;
-
-    // Launching initial function to each of the requested instances
-    for (const auto& pairing : _deployment.getPairings())
-    {
-      // Getting the destination resource idx paired to this instance request
-      const auto hostIndex = pairing.getAssignedHostIndex();
-
-      // Getting requested instance's name
-      const auto& requestedInstanceName = pairing.getRequestedInstanceName();
-
-      // Getting requested instance's information
-      const auto& requestedInstance = request.getInstances().at(requestedInstanceName);
-
-      // Getting the function to run for the paired instance
-      const auto fcName = requestedInstance.getFunction();
-      
-      // Checking the requested function was registered
-      if (_registeredFunctions.contains(fcName) == false)
-      {
-          fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", fcName.c_str());
-          abort();
-      } 
-      
-      
-      // Launching initial function in the destination instance
-      // If the resource index is the root instance, then don't send RPC. It will be executed manually
-      if (hostIndex != _rootInstanceIdx)
-      {
-        // printf("Launching RPC: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
-        launchFunction(hostIndex, fcName);
-      } 
-      else
-      {
-        // printf("Running Root: ResourceIdx %lu, FunctionName: %s\n", resourceIdx, fcName.c_str());
-        rootInstanceFcName = fcName;
-      } 
-    }
-
     // Broadcasting deployment information to non-root instances
     broadcastDeployment();
 
-    // The root instance runs its own function now
-    const auto& rootInstanceFc = _registeredFunctions[rootInstanceFcName];
+    // Creating communication channels
+    createChannels();
 
-    // printf("Root Function Name: %s\n", rootInstanceFcName.c_str());
-    rootInstanceFc();
-
-    printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
+    // Running initial function assigned to this host
+    runInitialFunction();
   }
 
   __INLINE__ void registerFunction(const std::string& functionName, std::function<void()> fc)
@@ -320,12 +280,51 @@ class DeployR final
       return deployment;
   }
 
+  __INLINE__ void createChannels()
+  {
+    printf("Create Channels (%lu)\n", _localHostIndex);
+  }
+
+  __INLINE__ void runInitialFunction()
+  {
+    // Getting pairings
+    const auto& pairings = _deployment.getPairings();
+
+    // Finding the pairing corresponding to this host
+    deployr::Deployment::Pairing pairing;
+    for (const auto& p : pairings) if (p.getAssignedHostIndex() == _localHostIndex) { pairing = p; break; }
+
+    // Getting requested instance's name
+    const auto& requestedInstanceName = pairing.getRequestedInstanceName();
+
+    // Getting requested instance's information
+    const auto& requestedInstance = _deployment.getRequest().getInstances().at(requestedInstanceName);
+
+    // Getting the function to run for the paired instance
+    const auto fcName = requestedInstance.getFunction();
+    
+    // Checking the requested function was registered
+    if (_registeredFunctions.contains(fcName) == false)
+    {
+        fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", fcName.c_str());
+        abort();
+    } 
+    
+    // Getting function pointer
+    const auto& initialFc = _registeredFunctions[fcName];
+
+    // Running initial function
+    initialFc();
+  }
+
   bool _continueExecuting = true;
   std::unique_ptr<Engine> _engine;
 
   std::map<std::string, std::function<void()>> _registeredFunctions;
-  size_t _rootInstanceIdx;
   
+  // Index of this host on the deployment
+  size_t _localHostIndex;
+
   // Storage for the local system topology
   nlohmann::json _localTopology;
 

@@ -85,6 +85,18 @@ class Engine
     virtual void abort() = 0;
     virtual void finalize() = 0;
 
+    __INLINE__ size_t getLocalInstanceIndex() const
+    {
+        const auto localHostInstanceId = _instanceManager->getCurrentInstance()->getId();
+
+        const auto& instances = _instanceManager->getInstances(); 
+        for (size_t i = 0; i < instances.size(); i++)
+            if (instances[i]->getId() == localHostInstanceId)
+                return i;
+        
+        return 0;
+    }
+
     __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
 
     __INLINE__ HiCR::Instance& getRootInstance() const
