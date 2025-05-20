@@ -313,17 +313,23 @@ class DeployR final
       // Getting channel's consumer
       const auto& consumer = channel.getConsumer();
 
+      // Getting my local instance name
+      const auto& localInstanceName = _localInstance.getName();
+
       // Check if this machine is involved in communication
       bool isRelevantChannel = false;
-      if (std::find(producers.begin(), producers.end(), _localInstanceName) != producers.end()) isRelevantChannel = true;
-      if (channel.getConsumer() == _localInstanceName) isRelevantChannel = true;
+      if (std::find(producers.begin(), producers.end(), localInstanceName) != producers.end()) isRelevantChannel = true;
+      if (channel.getConsumer() == localInstanceName) isRelevantChannel = true;
 
       // Getting channel unique id (required as a tag by HiCR channels)
       const auto channelId = i;
-      if (isRelevantChannel) printf("Instance '%s' - Creating channel %lu '%s'\n", _localInstanceName.c_str(), channelId, channels[i].getName().c_str());
+      if (isRelevantChannel) printf("Instance '%s' - Creating channel %lu '%s'\n", localInstanceName.c_str(), channelId, channels[i].getName().c_str());
       
       // Creating channel object
       const auto channelObject = _engine->createChannel(channelId, name, {}, 0, 0, 0);
+
+      // Adding channel to map
+      _channels[name] = channelObject;
     }
   }
 
@@ -337,10 +343,10 @@ class DeployR final
         for (const auto& p : pairings) if (p.getAssignedHostIndex() == _localHostIndex) { pairing = p; break; }
     
         // Getting requested instance's name
-        _localInstanceName = pairing.getRequestedInstanceName();
+        const auto& localInstanceName = pairing.getRequestedInstanceName();
     
         // Getting requested instance's information
-        _localInstance = _deployment.getRequest().getInstances().at(_localInstanceName);
+        _localInstance = _deployment.getRequest().getInstances().at(localInstanceName);
   }
 
   __INLINE__ void runInitialFunction()
@@ -367,9 +373,6 @@ class DeployR final
 
   std::map<std::string, std::function<void()>> _registeredFunctions;
   
-  // Instance that this host will be running
-  std::string _localInstanceName;
-
   // Local instance object
   Request::Instance _localInstance;
 
