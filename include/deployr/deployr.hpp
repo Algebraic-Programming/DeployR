@@ -290,8 +290,6 @@ class DeployR final
 
   __INLINE__ void createChannels()
   {
-    printf("Create Channels (%lu)\n", _localHostIndex);
-
     // Getting original request
     const auto& request = _deployment.getRequest();
 
@@ -313,20 +311,30 @@ class DeployR final
       // Getting channel's consumer
       const auto& consumer = channel.getConsumer();
 
-      // Getting my local instance name
-      const auto& localInstanceName = _localInstance.getName();
+      // Getting buffer capacity (max token count)
+      const auto& bufferCapacity = channel.getBufferCapacity();
 
-      // Check if this machine is involved in communication
-      bool isRelevantChannel = false;
-      if (std::find(producers.begin(), producers.end(), localInstanceName) != producers.end()) isRelevantChannel = true;
-      if (channel.getConsumer() == localInstanceName) isRelevantChannel = true;
+      // Getting buffer size (bytes)
+      const auto& bufferSize = channel.getBufferSize();
 
+      // Getting producer HiCR instance list
+      std::vector<HiCR::Instance::instanceId_t> producerInstances;
+      for (const auto& producer : producers)
+      {
+        const auto instanceId = _deployment.getPairings().at(producer);
+        producerInstances.push_back(instanceId);
+      } 
+
+      // Getting consumer instance id
+      const auto& consumerInstance = _deployment.getPairings().at(consumer);
+    
       // Getting channel unique id (required as a tag by HiCR channels)
       const auto channelId = i;
-      if (isRelevantChannel) printf("Instance '%s' - Creating channel %lu '%s'\n", localInstanceName.c_str(), channelId, channels[i].getName().c_str());
+      // const auto& localInstanceName = _localInstance.getName();
+      // printf("Instance '%s' - Creating channel %lu '%s'\n", localInstanceName.c_str(), channelId, channels[i].getName().c_str());
       
       // Creating channel object
-      const auto channelObject = _engine->createChannel(channelId, name, {}, 0, 0, 0);
+      const auto channelObject = _engine->createChannel(channelId, name, producerInstances, consumerInstance, bufferCapacity, bufferSize);
 
       // Adding channel to map
       _channels[name] = channelObject;
@@ -339,11 +347,8 @@ class DeployR final
         const auto& pairings = _deployment.getPairings();
 
         // Finding the pairing corresponding to this host
-        deployr::Deployment::Pairing pairing;
-        for (const auto& p : pairings) if (p.getAssignedHostIndex() == _localHostIndex) { pairing = p; break; }
-    
-        // Getting requested instance's name
-        const auto& localInstanceName = pairing.getRequestedInstanceName();
+        std::string localInstanceName;
+        for (const auto& p : pairings) if (p.second == _localHostIndex) { localInstanceName = p.first; break; }
     
         // Getting requested instance's information
         _localInstance = _deployment.getRequest().getInstances().at(localInstanceName);

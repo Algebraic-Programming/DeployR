@@ -28,25 +28,25 @@ class Request final
         _consumer = hicr::json::getString(channelJs, "Consumer");
 
         // Parsing buffer size (in tokens)
-        _bufferSize = hicr::json::getNumber<size_t>(channelJs, "Buffer Size (Tokens)");
+        _bufferCapacity = hicr::json::getNumber<size_t>(channelJs, "Buffer Capacity (Tokens)");
 
         // Parsing buffer size (in tokens)
-        _tokenSize = hicr::json::getNumber<size_t>(channelJs, "Token Size (Bytes)");
+        _bufferSize = hicr::json::getNumber<size_t>(channelJs, "Buffer Size (Bytes)");
       }
 
       __INLINE__ const std::string& getName() const { return _name; }
       __INLINE__ const std::vector<std::string>& getProducers() const { return _producers; }
       __INLINE__ const std::string& getConsumer() const { return _consumer; }
+      __INLINE__ const size_t getBufferCapacity() const { return _bufferCapacity; }
       __INLINE__ const size_t getBufferSize() const { return _bufferSize; }
-      __INLINE__ const size_t getTokenSize() const { return _tokenSize; }
 
       private:
 
       std::string _name;
       std::vector<std::string> _producers;
       std::string _consumer;
+      size_t _bufferCapacity;
       size_t _bufferSize;
-      size_t _tokenSize;
     }; // class Channel
 
     class HostType final 
