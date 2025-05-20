@@ -2,6 +2,8 @@
 
 #include <hicr/core/definitions.hpp>
 #include <map>
+#include <vector>
+#include <algorithm>
 
 namespace deployr 
 {
@@ -26,6 +28,9 @@ class Request final
 
         // Parsing consumer
         _consumer = hicr::json::getString(channelJs, "Consumer");
+
+        // Checking if consumer is not part of the producer list
+        if (std::find(_producers.begin(), _producers.end(), _consumer) == _producers.end()) HICR_THROW_LOGIC("Channel '%s' defines '%s' as both consumer and producer. This is not supported\n", _name.c_str(), _consumer.c_str());
 
         // Parsing buffer size (in tokens)
         _bufferCapacity = hicr::json::getNumber<size_t>(channelJs, "Buffer Capacity (Tokens)");

@@ -135,11 +135,10 @@ class Engine
     }
 
     #define SIZES_BUFFER_KEY 0
-    #define PRODUCER_COORDINATION_BUFFER_FOR_SIZES_KEY 1
-    #define PRODUCER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY 2
     #define CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY 3
     #define CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY 4
     #define CONSUMER_PAYLOAD_KEY 5
+    #define _CHANNEL_CREATION_ERROR 1
 
     __INLINE__ std::shared_ptr<Channel> createChannel(
         const Channel::channelId_t channelId,
@@ -166,9 +165,6 @@ class Engine
         for (const auto producerIdx : producerIdxs)
             if (producerIdx == localInstanceIndex) { isProducer = true; break; }
 
-        // Being both producer and consumer, fail as this is not supported
-        if (isConsumer && isProducer) return nullptr;             
-
         // Finding the first memory space to create our RPC engine
         auto bufferDevice = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
         auto bufferMemorySpace = bufferDevice->getMemorySpaceList().begin().operator*();
@@ -189,20 +185,20 @@ class Engine
             auto coordinationBufferSize = HiCR::channel::variableSize::Base::getCoordinationBufferSize();
 
             // Allocating coordination buffer for internal message size metadata
-            auto coordinationBufferForCounts = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+            auto coordinationBufferForSizes = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
             // Allocating coordination buffer for internal payload metadata
             auto coordinationBufferForPayloads = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
             // Initializing coordination buffer (sets to zero the counters)
-            HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForCounts);
+            HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForSizes);
 
             HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForPayloads);
 
             // Exchanging local memory slots to become global for them to be used by the remote end
             _communicationManager->exchangeGlobalMemorySlots(channelId,
                                                             {{SIZES_BUFFER_KEY, sizesBufferSlot},
-                                                            {CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY, coordinationBufferForCounts},
+                                                            {CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY, coordinationBufferForSizes},
                                                             {CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY, coordinationBufferForPayloads},
                                                             {CONSUMER_PAYLOAD_KEY, payloadBufferSlot}});
 
@@ -211,7 +207,7 @@ class Engine
 
             // Obtaining the globally exchanged memory slots
             auto globalSizesBufferSlot                 = _communicationManager->getGlobalMemorySlot(channelId, SIZES_BUFFER_KEY);
-            auto consumerCoordinationBufferForCounts   = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
+            auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
             auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
             auto globalPayloadBuffer                   = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_PAYLOAD_KEY);
 
@@ -219,9 +215,9 @@ class Engine
             consumerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Consumer>(*_communicationManager,
                                                                                 globalPayloadBuffer,   /* payloadBuffer */
                                                                                 globalSizesBufferSlot, /* tokenSizeBuffer */
-                                                                                coordinationBufferForCounts,
+                                                                                coordinationBufferForSizes,
                                                                                 coordinationBufferForPayloads,
-                                                                                consumerCoordinationBufferForCounts,
+                                                                                consumerCoordinationBufferForSizes,
                                                                                 consumerCoordinationBufferForPayloads,
                                                                                 bufferSize,
                                                                                 bufferCapacity);
@@ -234,14 +230,14 @@ class Engine
             auto coordinationBufferSize = HiCR::channel::variableSize::Base::getCoordinationBufferSize();
 
             // Allocating sizes buffer as a local memory slot
-            auto coordinationBufferForCounts = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+            auto coordinationBufferForSizes = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
             auto coordinationBufferForPayloads = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
             auto sizeInfoBuffer = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, sizeof(size_t));
 
             // Initializing coordination buffers for message sizes and payloads (sets to zero the counters)
-            HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForCounts);
+            HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForSizes);
             HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForPayloads);
 
             // Exchanging local memory slots to become global for them to be used by the remote end
@@ -252,7 +248,7 @@ class Engine
 
             // Obtaining the globally exchanged memory slots
             auto sizesBuffer                           = _communicationManager->getGlobalMemorySlot(channelId, SIZES_BUFFER_KEY);
-            auto consumerCoordinationBufferForCounts   = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
+            auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
             auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
             auto payloadBuffer                         = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_PAYLOAD_KEY);
 
@@ -261,9 +257,9 @@ class Engine
                                                                                 sizeInfoBuffer,
                                                                                 payloadBuffer,
                                                                                 sizesBuffer,
-                                                                                coordinationBufferForCounts,
+                                                                                coordinationBufferForSizes,
                                                                                 coordinationBufferForPayloads,
-                                                                                consumerCoordinationBufferForCounts,
+                                                                                consumerCoordinationBufferForSizes,
                                                                                 consumerCoordinationBufferForPayloads,
                                                                                 bufferSize,
                                                                                 sizeof(char),

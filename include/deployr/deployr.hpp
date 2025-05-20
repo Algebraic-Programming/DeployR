@@ -336,8 +336,8 @@ class DeployR final
       // Creating channel object
       const auto channelObject = _engine->createChannel(channelId, name, producerInstances, consumerInstance, bufferCapacity, bufferSize);
 
-      // Adding channel to map
-      _channels[name] = channelObject;
+      // Adding channel to map, only if defined
+      if (channelObject != nullptr) _channels[name] = channelObject;
     }
   }
 

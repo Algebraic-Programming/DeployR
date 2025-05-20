@@ -13,7 +13,7 @@ class Channel final
 
     typedef size_t channelId_t;
 
-    Channel() = default;
+    Channel() = delete;
     Channel(
         const channelId_t channelId,
         std::shared_ptr<HiCR::channel::variableSize::MPSC::locking::Consumer> consumerInterface,
