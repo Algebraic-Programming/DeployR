@@ -52,7 +52,7 @@
     "Channels":
     [
         {
-            "Name": "Coordinator -> Worker 1",
+            "Name": "Coordinator -> Worker 1", 
             "Producers": [ "Coordinator" ],
             "Consumer": "Worker 1",
             "Buffer Capacity (Tokens)": 8,

@@ -36,7 +36,7 @@ class Engine
     Engine() = default;
     virtual ~Engine() = default;
 
-    __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _instanceManager->getInstances(); }
+    [[nodiscard]] __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _instanceManager->getInstances(); }
     __INLINE__ void initialize(int* pargc, char*** pargv)
     {
         // initialize engine-specific managers
@@ -74,9 +74,9 @@ class Engine
         _computeManager = std::make_unique<HiCR::backend::pthreads::ComputeManager>();
 
         // Finding the first memory space and compute resource to create our RPC engine
-        auto RPCDevice = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
-        auto RPCMemorySpace = RPCDevice->getMemorySpaceList().begin().operator*();
-        auto RPCComputeResource = RPCDevice->getComputeResourceList().begin().operator*();
+        _firstDevice = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
+        auto RPCMemorySpace = _firstDevice->getMemorySpaceList().begin().operator*();
+        auto RPCComputeResource = _firstDevice->getComputeResourceList().begin().operator*();
 
         // Instantiating RPC engine
         _rpcEngine = std::make_unique<HiCR::frontend::RPCEngine>(*_communicationManager, *_instanceManager, *_memoryManager, *_computeManager, RPCMemorySpace, RPCComputeResource);
@@ -88,7 +88,7 @@ class Engine
     virtual void abort() = 0;
     virtual void finalize() = 0;
 
-    __INLINE__ size_t getLocalInstanceIndex() const
+    [[nodiscard]] __INLINE__ size_t getLocalInstanceIndex() const
     {
         const auto localHostInstanceId = _instanceManager->getCurrentInstance()->getId();
 
@@ -100,7 +100,7 @@ class Engine
         return 0;
     }
 
-    __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
+    [[nodiscard]] __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
 
     __INLINE__ HiCR::Instance& getRootInstance() const
     { 
@@ -109,7 +109,7 @@ class Engine
       return *(instances[0]);
     }
 
-    __INLINE__ size_t getRootInstanceIndex() const
+    [[nodiscard]] __INLINE__ size_t getRootInstanceIndex() const
     { 
       const auto& instances = _instanceManager->getInstances();
       for (size_t i = 0; i < instances.size(); i++) if (instances[i]->isRootInstance()) return i;
@@ -142,7 +142,7 @@ class Engine
 
     __INLINE__ std::shared_ptr<Channel> createChannel(
         const Channel::channelId_t channelId,
-        const std::string name,
+        const std::string channelName,
         const std::vector<size_t> producerIdxs,
         const size_t consumerIdx,
         const size_t bufferCapacity,
@@ -165,9 +165,8 @@ class Engine
         for (const auto producerIdx : producerIdxs)
             if (producerIdx == localInstanceIndex) { isProducer = true; break; }
 
-        // Finding the first memory space to create our RPC engine
-        auto bufferDevice = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
-        auto bufferMemorySpace = bufferDevice->getMemorySpaceList().begin().operator*();
+        // Finding the first memory space to create our channels
+        auto bufferMemorySpace = _firstDevice->getMemorySpaceList().begin().operator*();
 
         // If I am consumer, create the consumer interface for the channel
         if (isConsumer == true && isProducer == false)
@@ -276,12 +275,11 @@ class Engine
             _communicationManager->fence(channelId);
         }
 
-        auto channel = std::make_shared<Channel>(channelId, consumerInterface, producerInterface);
-        return channel;
+        return std::make_shared<Channel>(channelId, channelName, _memoryManager.get(), bufferMemorySpace, consumerInterface, producerInterface);
     }
 
     __INLINE__ void submitRPCReturnValue(void* buffer, const size_t size) { _rpcEngine->submitReturnValue(buffer, size); }
-    __INLINE__ std::shared_ptr<HiCR::LocalMemorySlot> getRPCReturnValue(HiCR::Instance &instance) const {  return _rpcEngine->getReturnValue(instance); }
+    [[nodiscard]] __INLINE__ std::shared_ptr<HiCR::LocalMemorySlot> getRPCReturnValue(HiCR::Instance &instance) const {  return _rpcEngine->getReturnValue(instance); }
     __INLINE__ void freeRPCReturnValue(std::shared_ptr<HiCR::LocalMemorySlot> returnValue) const {  _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue); }
     
     __INLINE__ nlohmann::json detectLocalTopology()
@@ -324,6 +322,9 @@ class Engine
 
     // RPC engine
     std::unique_ptr<HiCR::frontend::RPCEngine> _rpcEngine;
+
+    // First device to use as buffer source
+    std::shared_ptr<HiCR::Device> _firstDevice;
 
 }; // class Engine
 

@@ -30,7 +30,7 @@ class Request final
         _consumer = hicr::json::getString(channelJs, "Consumer");
 
         // Checking if consumer is not part of the producer list
-        if (std::find(_producers.begin(), _producers.end(), _consumer) == _producers.end()) HICR_THROW_LOGIC("Channel '%s' defines '%s' as both consumer and producer. This is not supported\n", _name.c_str(), _consumer.c_str());
+        if (std::find(_producers.begin(), _producers.end(), _consumer) != _producers.end()) HICR_THROW_LOGIC("Channel '%s' defines '%s' as both consumer and producer. This is not supported\n", _name.c_str(), _consumer.c_str());
 
         // Parsing buffer size (in tokens)
         _bufferCapacity = hicr::json::getNumber<size_t>(channelJs, "Buffer Capacity (Tokens)");
@@ -39,11 +39,11 @@ class Request final
         _bufferSize = hicr::json::getNumber<size_t>(channelJs, "Buffer Size (Bytes)");
       }
 
-      __INLINE__ const std::string& getName() const { return _name; }
-      __INLINE__ const std::vector<std::string>& getProducers() const { return _producers; }
-      __INLINE__ const std::string& getConsumer() const { return _consumer; }
-      __INLINE__ const size_t getBufferCapacity() const { return _bufferCapacity; }
-      __INLINE__ const size_t getBufferSize() const { return _bufferSize; }
+      [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
+      [[nodiscard]] __INLINE__ const std::vector<std::string>& getProducers() const { return _producers; }
+      [[nodiscard]] __INLINE__ const std::string& getConsumer() const { return _consumer; }
+      [[nodiscard]] __INLINE__ const size_t getBufferCapacity() const { return _bufferCapacity; }
+      [[nodiscard]] __INLINE__ const size_t getBufferSize() const { return _bufferSize; }
 
       private:
 
@@ -73,8 +73,8 @@ class Request final
           _count = hicr::json::getNumber<size_t>(deviceJs, "Count");
         }
 
-        __INLINE__ const std::string& getType() const { return _type; }
-        __INLINE__ const std::size_t getCount() const { return _count; }
+        [[nodiscard]] __INLINE__ const std::string& getType() const { return _type; }
+        [[nodiscard]] __INLINE__ const std::size_t getCount() const { return _count; }
 
         private:
 
@@ -101,10 +101,10 @@ class Request final
         for (const auto& deviceJs : devicesJs) _devices.push_back(Device(deviceJs));
       }
 
-      __INLINE__ const size_t getMinMemoryGB() const { return _minMemoryGB; }
-      __INLINE__ const size_t getMinProcessingUnits() const { return _minProcessingUnits; }
-      __INLINE__ const std::vector<Device>& getDevices() const { return _devices; }
-      __INLINE__ const std::string& getName() const { return _name; }
+      [[nodiscard]] __INLINE__ const size_t getMinMemoryGB() const { return _minMemoryGB; }
+      [[nodiscard]] __INLINE__ const size_t getMinProcessingUnits() const { return _minProcessingUnits; }
+      [[nodiscard]] __INLINE__ const std::vector<Device>& getDevices() const { return _devices; }
+      [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
 
       private: 
 
@@ -133,9 +133,9 @@ class Request final
         _function = hicr::json::getString(instanceJs, "Function");
       }
 
-      __INLINE__ const std::string& getName() const { return _name; }
-      __INLINE__ const std::string& getFunction() const { return _function; }
-      __INLINE__ const std::string& getHostType() const { return _hostType; }
+      [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
+      [[nodiscard]] __INLINE__ const std::string& getFunction() const { return _function; }
+      [[nodiscard]] __INLINE__ const std::string& getHostType() const { return _hostType; }
 
       private:
 
@@ -210,12 +210,12 @@ class Request final
       }
     }
 
-    __INLINE__ const std::map<std::string, HostType>& getHostTypes() const { return _hostTypes; }
-    __INLINE__ const std::map<std::string, Instance>& getInstances() const { return _instances; }
-    __INLINE__ const std::vector<Channel>& getChannels() const { return _channels; }
-    __INLINE__ const std::string& getName() const { return _name; }
+    [[nodiscard]] __INLINE__ const std::map<std::string, HostType>& getHostTypes() const { return _hostTypes; }
+    [[nodiscard]] __INLINE__ const std::map<std::string, Instance>& getInstances() const { return _instances; }
+    [[nodiscard]] __INLINE__ const std::vector<Channel>& getChannels() const { return _channels; }
+    [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
 
-    __INLINE__ nlohmann::json serialize() const
+    [[nodiscard]] __INLINE__ nlohmann::json serialize() const
     {
         // Since this is a static object, simply return originating JSON
         return _requestJs;

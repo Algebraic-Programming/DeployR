@@ -1,6 +1,8 @@
 #include <deployr/deployr.hpp>
 #include <nlohmann_json/json.hpp>
 #include <fstream>
+#include "coordinator.hpp"
+#include "worker.hpp"
 
 int main(int argc, char* argv[])
 {
@@ -8,8 +10,8 @@ int main(int argc, char* argv[])
     deployr::DeployR _deployr;
 
     // Creating Functions
-    _deployr.registerFunction("CoordinatorFc", []() { printf("Hi, I am coordinator\n"); });
-    _deployr.registerFunction("WorkerFc", []() { printf("Hi, I am worker\n"); });
+    _deployr.registerFunction("CoordinatorFc", [&]() { coordinatorFc(_deployr); });
+    _deployr.registerFunction("WorkerFc", [&]() { workerFc(_deployr); });
 
     // Initializing DeployR. Only one instance (root) continues from here
     _deployr.initialize(&argc, &argv);

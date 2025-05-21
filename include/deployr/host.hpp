@@ -14,7 +14,7 @@ class Host final
     Host(const size_t hostIndex, const nlohmann::json& topology) : _hostIndex(hostIndex), _topology(topology) {}
     ~Host() = default;
 
-    __INLINE__ bool checkCompatibility(const Request::HostType& request)
+    [[nodiscard]] __INLINE__ bool checkCompatibility(const Request::HostType& request)
     {
         ////////// Checking whether the _topology contains the minimum host memory
         const auto minHostMemoryGB = request.getMinMemoryGB();
@@ -99,10 +99,10 @@ class Host final
         return true;
     }
 
-    const size_t getHostIndex() const { return _hostIndex; }
-    const nlohmann::json& getTopology() const { return _topology; }
+    [[nodiscard]] const size_t getHostIndex() const { return _hostIndex; }
+    [[nodiscard]] const nlohmann::json& getTopology() const { return _topology; }
 
-    __INLINE__ nlohmann::json serialize() const
+    [[nodiscard]] __INLINE__ nlohmann::json serialize() const
     {
         // Creating host JSON object
         nlohmann::json hostJs;

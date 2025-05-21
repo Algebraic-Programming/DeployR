@@ -188,12 +188,24 @@ class DeployR final
     // Adding new RPC to the set
     _registeredFunctions.insert({functionName, fc});
   }
-  __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _engine->getHiCRInstances(); }
+
+  __INLINE__ Channel& getChannel(const std::string& name)
+  {
+    if (_channels.contains(name) == false) HICR_THROW_LOGIC("Requested channel ('%s') is not defined for this instance ('%s')\n", name.c_str(), _localInstance.getName().c_str());
+
+    return _channels.at(name).operator*();
+  }
+
+  [[nodiscard]] __INLINE__ const Deployment& getDeployment() const { return _deployment; }
+  [[nodiscard]] __INLINE__ const Request::Instance& getLocalInstance() const { return _localInstance; }
   __INLINE__ void finalize() { _engine->finalize(); }
   __INLINE__ void abort() { _engine->abort(); }
-  __INLINE__ bool isRootInstance() const { return _engine->isRootInstance(); }
 
   private:
+
+  __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _engine->getHiCRInstances(); }
+
+  [[nodiscard]] __INLINE__ bool isRootInstance() const { return _engine->isRootInstance(); }
 
   __INLINE__ void launchFunction(const size_t resourceIdx, const std::string& functionName)
   {
@@ -206,7 +218,7 @@ class DeployR final
     _engine->launchRPC(resourceIdx, functionName);
   }
 
-  __INLINE__ std::vector<nlohmann::json> gatherGlobalTopology()
+  [[nodiscard]] __INLINE__ std::vector<nlohmann::json> gatherGlobalTopology()
   {
       // Storage
       std::vector<nlohmann::json> globalTopology;

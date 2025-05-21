@@ -23,7 +23,7 @@ class Deployment final
 
     __INLINE__ void addHost(const Host& host) { _hosts.push_back(host); }
 
-    __INLINE__ bool performMatching()
+    [[nodiscard]] __INLINE__ bool performMatching()
     {
         // Creating flat pairings vector
         std::vector<Pairing> pairingsVector;
@@ -76,9 +76,9 @@ class Deployment final
         return true;
     }
 
-    __INLINE__ const std::vector<Host>& getHosts() const { return _hosts; }
-    __INLINE__ const std::map<std::string, size_t>& getPairings() const { return _pairings; }
-    __INLINE__ const Request& getRequest() const { return _request; }
+    [[nodiscard]] __INLINE__ const std::vector<Host>& getHosts() const { return _hosts; }
+    [[nodiscard]] __INLINE__ const std::map<std::string, size_t>& getPairings() const { return _pairings; }
+    [[nodiscard]] __INLINE__ const Request& getRequest() const { return _request; }
 
     __INLINE__ nlohmann::json serialize() const
     {
@@ -136,8 +136,8 @@ class Deployment final
         Pairing() = default;
         Pairing(const std::string& requestedInstanceName) : _requestedInstanceName(requestedInstanceName) {}
 
-        const std::string& getRequestedInstanceName() const { return _requestedInstanceName; }
-        const size_t& getAssignedHostIndex() const { return _assignedHostIndex; }
+        [[nodiscard]] const std::string& getRequestedInstanceName() const { return _requestedInstanceName; }
+        [[nodiscard]] const size_t& getAssignedHostIndex() const { return _assignedHostIndex; }
         void setAssignedHostIndex(const size_t& assignedHostIndex) { _assignedHostIndex = assignedHostIndex; }
 
         private:
