@@ -7,20 +7,20 @@
 int main(int argc, char* argv[])
 {
     // Creating DeployR instance
-    deployr::DeployR _deployr;
+    deployr::DeployR deployr;
 
     // Creating Functions
-    _deployr.registerFunction("CoordinatorFc", [&]() { coordinatorFc(_deployr); });
-    _deployr.registerFunction("WorkerFc", [&]() { workerFc(_deployr); });
+    deployr.registerFunction("CoordinatorFc", [&]() { coordinatorFc(deployr); });
+    deployr.registerFunction("WorkerFc", [&]() { workerFc(deployr); });
 
     // Initializing DeployR. Only one instance (root) continues from here
-    _deployr.initialize(&argc, &argv);
+    deployr.initialize(&argc, &argv);
 
     // Checking arguments
     if (argc != 2)
     {
         fprintf(stderr, "Error: Must provide the request file as argument.\n");
-        _deployr.abort();
+        deployr.abort();
         return -1;
     }
 
@@ -35,10 +35,10 @@ int main(int argc, char* argv[])
     deployr::Request request(requestJs);
 
     // Deploying request, getting deployment
-    _deployr.deploy(request);
+    deployr.deploy(request);
 
     // Finalize
-    _deployr.finalize();
+    deployr.finalize();
 
     printf("Finished Successfully\n");
 }
