@@ -29,6 +29,9 @@
 namespace deployr 
 {
 
+/**
+ * Instantiates device-specific HiCR backends and resolves the detection of the system topology and channel creation.
+ */
 class Engine
 {
     public:
@@ -141,14 +144,14 @@ class Engine
     #define _CHANNEL_CREATION_ERROR 1
 
     __INLINE__ std::shared_ptr<Channel> createChannel(
-        const Channel::channelId_t channelId,
+        const size_t channelTag,
         const std::string channelName,
         const std::vector<size_t> producerIdxs,
         const size_t consumerIdx,
         const size_t bufferCapacity,
         const size_t bufferSize)
     {
-        // printf("Creating channel %lu '%s', producer count: %lu (first: %lu), consumer %lu, bufferCapacity: %lu, bufferSize: %lu\n", channelId, name.c_str(), producerIdxs.size(), producerIdxs.size() > 0 ? producerIdxs[0] : 0, consumerIdx, bufferCapacity, bufferSize);
+        // printf("Creating channel %lu '%s', producer count: %lu (first: %lu), consumer %lu, bufferCapacity: %lu, bufferSize: %lu\n", channelTag, name.c_str(), producerIdxs.size(), producerIdxs.size() > 0 ? producerIdxs[0] : 0, consumerIdx, bufferCapacity, bufferSize);
         
         // Interfaces for the channel
         std::shared_ptr<HiCR::channel::variableSize::MPSC::locking::Consumer> consumerInterface = nullptr;
@@ -195,20 +198,20 @@ class Engine
             HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForPayloads);
 
             // Exchanging local memory slots to become global for them to be used by the remote end
-            _communicationManager->exchangeGlobalMemorySlots(channelId,
+            _communicationManager->exchangeGlobalMemorySlots(channelTag,
                                                             {{SIZES_BUFFER_KEY, sizesBufferSlot},
                                                             {CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY, coordinationBufferForSizes},
                                                             {CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY, coordinationBufferForPayloads},
                                                             {CONSUMER_PAYLOAD_KEY, payloadBufferSlot}});
 
             // Synchronizing so that all actors have finished registering their global memory slots
-            _communicationManager->fence(channelId);
+            _communicationManager->fence(channelTag);
 
             // Obtaining the globally exchanged memory slots
-            auto globalSizesBufferSlot                 = _communicationManager->getGlobalMemorySlot(channelId, SIZES_BUFFER_KEY);
-            auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
-            auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
-            auto globalPayloadBuffer                   = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_PAYLOAD_KEY);
+            auto globalSizesBufferSlot                 = _communicationManager->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
+            auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
+            auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
+            auto globalPayloadBuffer                   = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_PAYLOAD_KEY);
 
             // Creating producer and consumer channels
             consumerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Consumer>(*_communicationManager,
@@ -240,16 +243,16 @@ class Engine
             HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForPayloads);
 
             // Exchanging local memory slots to become global for them to be used by the remote end
-            _communicationManager->exchangeGlobalMemorySlots(channelId, {});
+            _communicationManager->exchangeGlobalMemorySlots(channelTag, {});
 
             // Synchronizing so that all actors have finished registering their global memory slots
-            _communicationManager->fence(channelId);
+            _communicationManager->fence(channelTag);
 
             // Obtaining the globally exchanged memory slots
-            auto sizesBuffer                           = _communicationManager->getGlobalMemorySlot(channelId, SIZES_BUFFER_KEY);
-            auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
-            auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
-            auto payloadBuffer                         = _communicationManager->getGlobalMemorySlot(channelId, CONSUMER_PAYLOAD_KEY);
+            auto sizesBuffer                           = _communicationManager->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
+            auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
+            auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
+            auto payloadBuffer                         = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_PAYLOAD_KEY);
 
             // Creating producer and consumer channels
             producerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Producer>(*_communicationManager,
@@ -269,13 +272,13 @@ class Engine
         if (isConsumer == false && isProducer == false)
         {
             // Exchanging local memory slots to become global for them to be used by the remote end
-            _communicationManager->exchangeGlobalMemorySlots(channelId, {});
+            _communicationManager->exchangeGlobalMemorySlots(channelTag, {});
 
             // Synchronizing so that all actors have finished registering their global memory slots
-            _communicationManager->fence(channelId);
+            _communicationManager->fence(channelTag);
         }
 
-        return std::make_shared<Channel>(channelId, channelName, _memoryManager.get(), bufferMemorySpace, consumerInterface, producerInterface);
+        return std::make_shared<Channel>(channelName, _memoryManager.get(), bufferMemorySpace, consumerInterface, producerInterface);
     }
 
     __INLINE__ void submitRPCReturnValue(void* buffer, const size_t size) { _rpcEngine->submitReturnValue(buffer, size); }

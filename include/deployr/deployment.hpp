@@ -9,6 +9,9 @@
 namespace deployr 
 {
 
+/**
+ * Represents the result of launching a deployment request. It contains the pairings between requested instances and the host that will contain them.
+ */
 class Deployment final 
 {
     public:

@@ -8,6 +8,9 @@
 namespace deployr::engine
 {
 
+/**
+ * Represents an MPI-based engine with the capability of deploying multiple instances at launch time (will not support runtime instance creation)
+ */
 class MPI final : public deployr::Engine
 {
   public:

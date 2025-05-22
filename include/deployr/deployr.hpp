@@ -25,6 +25,10 @@
 namespace deployr
 {
 
+/**
+ * Main runtime class of DeployR. This is the only entry point for end-users.Channel
+ * It provides the functionality to deploy a deployment request and give access to the channels created among the created instances.
+ */
 class DeployR final
 {
  public:

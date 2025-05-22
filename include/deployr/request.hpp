@@ -8,10 +8,16 @@
 namespace deployr 
 {
 
+/**
+ * A request object, representing a user's requirements for a deployment. This involves the instances, their hardware requirements, and the channels to create among them.
+ */
 class Request final 
 {
     public:
 
+    /**
+     * Represents the request for the creation of a channel during deployment. It indicates the buffer size and which will be the producer instances and which will be the consumer.
+     */
     class Channel
     {
       public: 
@@ -54,10 +60,16 @@ class Request final
       size_t _bufferSize;
     }; // class Channel
 
+    /**
+     * Represents a template for the hardware components of a given Host. The request's instances will point to one such template to indicate the minimum hardware requirements they need for deployment.
+     */
     class HostType final 
     {
       public:
 
+      /**
+       * Represents a device type to be contained in this host type, and how many of these devices should be present. It can indicate a certain GPU/NPU device, as well as CPU NUMA domains.
+       */
       class Device
       {
         public: 
@@ -115,6 +127,9 @@ class Request final
 
     }; // class HostType
 
+    /**
+     * Describes a request for an instance: an independent, self sufficient function running on its own exclusive host.
+     */
     class Instance
     {
       public: 

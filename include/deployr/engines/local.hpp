@@ -8,6 +8,9 @@
 namespace deployr::engine
 {
 
+/**
+ * Represents a single host environment with no distributed computing capabilities
+ */
 class Local final : public deployr::Engine
 {
   public:

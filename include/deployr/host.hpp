@@ -6,6 +6,9 @@
 namespace deployr 
 {
 
+/**
+ * This class represents an available hardware node (a whole host, or an SoC) that can be assigned 1:1 to a DeployR instance, to satisfy a request.
+ */
 class Host final 
 {
     public:
