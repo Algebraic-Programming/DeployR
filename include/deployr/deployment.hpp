@@ -17,6 +17,14 @@ class Deployment final
     public:
 
     Deployment() = default;
+
+    /**
+     * Constructor for a deployment
+     * 
+     * @param[in] request A user-provided request containing the requiments for this deployment.
+     * 
+     * The start time of deployment is taken at this time.
+     */
     Deployment(Request request) : _request(request)
     {
         // Setting start time at the creation of this object
@@ -24,8 +32,20 @@ class Deployment final
     };
     ~Deployment() = default;
 
+    /**
+     * Adds an available host (with its own topology) for pairing
+     * 
+     * @param[in] host The host to add
+     */
     __INLINE__ void addHost(const Host& host) { _hosts.push_back(host); }
 
+    /**
+     * Performs a matching between the requested instances and the available hosts
+     * 
+     * This implementation uses the Hopcroft-Karp algorithm to find a matching of all requested instances to a host.
+     * 
+     * @return True, if the matching was possible. False, otherwise.
+     */
     [[nodiscard]] __INLINE__ bool performMatching()
     {
         // Creating flat pairings vector
@@ -79,10 +99,32 @@ class Deployment final
         return true;
     }
 
+    /**
+     * Gets the available hosts in this deployment
+     * 
+     * @return A list of the added hosts
+     */
     [[nodiscard]] __INLINE__ const std::vector<Host>& getHosts() const { return _hosts; }
+
+    /**
+     * Gets the instance <-> host pairings
+     * 
+     * @return A map that links each instance by name to its assigned host index
+     */
     [[nodiscard]] __INLINE__ const std::map<std::string, size_t>& getPairings() const { return _pairings; }
+
+    /**
+     * Gets the underlying request used to generate this deployment
+     * 
+     * @return The request object
+     */
     [[nodiscard]] __INLINE__ const Request& getRequest() const { return _request; }
 
+    /**
+     * Function to serialize the contents of this deployment to be sent to another instance
+     * 
+     * @return A JSON object containing all the information of this deployment
+     */
     __INLINE__ nlohmann::json serialize() const
     {
         // Creating deployment JSON object
@@ -110,6 +152,11 @@ class Deployment final
         return deploymentJs;
     }
 
+    /**
+     * Deserializing deconstructor of the deployment
+     * 
+     * @param[in] deploymentJs JSON object containing all the information of a deployment
+     */
     Deployment(const nlohmann::json& deploymentJs)
     {
         // Deserializing information
@@ -131,34 +178,60 @@ class Deployment final
 
     private: 
 
-    // Represents a pairing
+    /// Represents an instance->host pairing
     class Pairing final
     {
         public: 
 
         Pairing() = default;
+
+        /**
+         * Constructor that takes the requested instance name
+         * 
+         * @param[in] requestedInstanceName The name of the instance for this pairing
+         */
         Pairing(const std::string& requestedInstanceName) : _requestedInstanceName(requestedInstanceName) {}
 
+        /**
+         * Function to get the name of the pairing's requested instance
+         * 
+         * @return The instance name
+         */
         [[nodiscard]] const std::string& getRequestedInstanceName() const { return _requestedInstanceName; }
+
+        /**
+         * Function to get the index host assigned to the instance
+         * 
+         * @return The host index
+         */
         [[nodiscard]] const size_t& getAssignedHostIndex() const { return _assignedHostIndex; }
+
+        /**
+         * Function to set the index host assigned to the instance
+         * 
+         * @param[in] assignedHostIndex The index to the host assigned to this instance
+         */
         void setAssignedHostIndex(const size_t& assignedHostIndex) { _assignedHostIndex = assignedHostIndex; }
 
         private:
 
+        /// The name of the requested instance for this pairing
         std::string _requestedInstanceName;
+
+        /// The index of the host assigned to the instance
         size_t _assignedHostIndex;
     };
 
-    // Time that the deployment started at the root instance
+    /// Time that the deployment started at the root instance
     std::string _deployStartTime;
 
-    // Request to fulfill
+    /// Request to fulfill
     Request _request;
 
-    // The pairings map: instance name -> HiCR instance vector entry index
+    /// The pairings map: instance name -> HiCR instance vector entry index
     std::map<std::string, size_t> _pairings;
 
-    // Provided hosts
+    /// Provided hosts
     std::vector<Host> _hosts;
     
 }; // class Deployment
