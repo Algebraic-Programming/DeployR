@@ -43,6 +43,8 @@ class Engine
 
     /**
      * Gets a collection, ordered by index, of all the detected / created HiCR instances
+     * 
+     * @return An array with the detected / created HiCR instances
      */
     [[nodiscard]] __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _instanceManager->getInstances(); }
 
@@ -204,6 +206,19 @@ class Engine
     #define CONSUMER_PAYLOAD_KEY 5
     #define _CHANNEL_CREATION_ERROR 1
 
+    /**
+     * Function to create a variable-sized token locking channel between N producers and 1 consumer
+     * 
+     * @note This is a collective operation. All instances must participate in this call, even if they don't play a producer or consumer role
+     * 
+     * @param[in] channelTag The unique identifier for the channel. This tag should be unique for each channel
+     * @param[in] channelName The name of the channel. This will be the identifier used to retrieve the channel
+     * @param[in] producerIdxs Indexes of the instances within the HiCR instance list to serve as producers
+     * @param[in] consumerIdx Index of the instance within the HiCR instance list to serve as consumer
+     * @param[in] bufferCapacity The number of tokens that can be simultaneously held in the channel's buffer
+     * @param[in] bufferSize The size (bytes) of the buffer.abort
+     * @return A shared pointer of the newly created channel
+     */
     __INLINE__ std::shared_ptr<Channel> createChannel(
         const size_t channelTag,
         const std::string channelName,
@@ -342,10 +357,37 @@ class Engine
         return std::make_shared<Channel>(channelName, _memoryManager.get(), bufferMemorySpace, consumerInterface, producerInterface);
     }
 
+    /**
+     * When executing an RPC, this function provides a buffer to serve as return value
+     * The buffer will be sent to the RPC caller instance
+     * 
+     * @param[in] buffer The buffer containing the data to return
+     * @param[in] size The size of the return value buffer
+     */
     __INLINE__ void submitRPCReturnValue(void* buffer, const size_t size) { _rpcEngine->submitReturnValue(buffer, size); }
+
+    /**
+     * For the RPC caller, this function retrieves the callee's return value
+     * 
+     * @note This function will block the instance until the value is received
+     * 
+     * @param[in] instance HiCR instance object to listen for the return value for
+     * @return A HiCR local memory slot containing the return value
+     */
     [[nodiscard]] __INLINE__ std::shared_ptr<HiCR::LocalMemorySlot> getRPCReturnValue(HiCR::Instance &instance) const {  return _rpcEngine->getReturnValue(instance); }
+
+    /**
+     * Releases the memory of a received return value
+     * 
+     * @param[in] returnValue The return value object to free
+     */
     __INLINE__ void freeRPCReturnValue(std::shared_ptr<HiCR::LocalMemorySlot> returnValue) const {  _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue); }
     
+    /**
+     * Detects the local hardware and network topology of the local host
+     * 
+     * @return A JSON-encoded HiCR topology containing all the detected devices
+     */
     __INLINE__ nlohmann::json detectLocalTopology()
     {
         // Storage for the machine's topology
@@ -367,27 +409,33 @@ class Engine
 
     protected: 
 
+    /**
+     * Initializes the HiCR managers for topology, instance, memory, and communication
+     * 
+     *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+     *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+     */
     virtual void initializeManagers(int* pargc, char*** pargv) = 0;
 
-    // Storage for the distributed engine's communication manager
+    /// Storage for the distributed engine's communication manager
     std::unique_ptr<HiCR::CommunicationManager> _communicationManager;
 
-    // Storage for the distributed engine's instance manager
+    /// Storage for the distributed engine's instance manager
     std::unique_ptr<HiCR::InstanceManager> _instanceManager;
 
-    // Storage for the distributed engine's memory manager
+    /// Storage for the distributed engine's memory manager
     std::unique_ptr<HiCR::MemoryManager> _memoryManager;
 
-    // Storage for topology managers
+    /// Storage for topology managers
     std::vector<std::unique_ptr<HiCR::TopologyManager>> _topologyManagers;
 
-    // Storage for compute manager
+    /// Storage for compute manager
     std::unique_ptr<HiCR::backend::pthreads::ComputeManager> _computeManager;
 
-    // RPC engine
+    /// RPC engine
     std::unique_ptr<HiCR::frontend::RPCEngine> _rpcEngine;
 
-    // First device to use as buffer source
+    /// First device to use as buffer source
     std::shared_ptr<HiCR::Device> _firstDevice;
 
 }; // class Engine
