@@ -14,13 +14,29 @@ class Host final
     public:
 
     Host() = default;
+
+    /**
+     * Constructor for the Host object
+     * 
+     * @param[in] hostIndex The index of the host within the HiCR instance list
+     * @param[in] topology The JSON-encoded HiCR topology detected for this host
+     */
     Host(const size_t hostIndex, const nlohmann::json& topology) : _hostIndex(hostIndex), _topology(topology) {}
     ~Host() = default;
 
-    [[nodiscard]] __INLINE__ bool checkCompatibility(const Request::HostType& request)
+    /**
+     * Checks whether this host satisfied a certain host type.
+     * That is, whether it contains the minimuim memory and processing units required, and that all the devices
+     * enumerated within the host type are present in this device
+     * 
+     * @param[in] hostType The host type requested to check for
+     * 
+     * @return true, if this host satisfies the host type; false, otherwise.
+     */
+    [[nodiscard]] __INLINE__ bool checkCompatibility(const Request::HostType& hostType)
     {
         ////////// Checking whether the _topology contains the minimum host memory
-        const auto minHostMemoryGB = request.getMinMemoryGB();
+        const auto minHostMemoryGB = hostType.getMinMemoryGB();
 
         // Getting topology's devices
         const auto& devices = hicr::json::getArray<nlohmann::json>(_topology, "Devices");
@@ -52,7 +68,7 @@ class Host final
         if (actualHostMemoryGB < minHostMemoryGB) return false;
 
         ////////// Checking whether the _topology contains the minimum processing units
-        const auto minHostProcessingUnits = request.getMinProcessingUnits();
+        const auto minHostProcessingUnits = hostType.getMinProcessingUnits();
 
         // Looking for NUMA Domain device to add up the number of processing units
         size_t actualHostProcessingUnits = 0;
@@ -75,7 +91,7 @@ class Host final
         // printf("Found %luGB - %lu PUs\n", actualHostMemoryGB, actualHostProcessingUnits);
 
         ////////// Checking for requested devices
-        const auto requestedDevices = request.getDevices();
+        const auto requestedDevices = hostType.getDevices();
 
         for (const auto& requestedDevice : requestedDevices)
         {
@@ -102,9 +118,25 @@ class Host final
         return true;
     }
 
+    /**
+     * Retrieves the host index
+     * 
+     * @return The host index
+     */
     [[nodiscard]] const size_t getHostIndex() const { return _hostIndex; }
+
+    /**
+     * Retrieves the host topology
+     * 
+     * @return The host topolgoy
+     */
     [[nodiscard]] const nlohmann::json& getTopology() const { return _topology; }
 
+    /**
+     * Serializes the host information to be sent to remote instances and deserialized there
+     * 
+     * @return A JSON-encoded details of the host
+     */
     [[nodiscard]] __INLINE__ nlohmann::json serialize() const
     {
         // Creating host JSON object
@@ -119,6 +151,11 @@ class Host final
         return hostJs;
     }
 
+    /**
+     * Deserializing constructor
+     * 
+     * @param[in] hostJs A JSON-encoded details of the host
+     */
     Host(const nlohmann::json& hostJs)
     {
         // Deserializing information
@@ -128,10 +165,10 @@ class Host final
 
     private: 
 
-    // Index of the corresponding host within the instance manager's instance vector
+    /// Index of the corresponding host within the instance manager's instance vector
     size_t _hostIndex;
 
-    // Host's actual topology, in JSON format
+    /// Host's actual topology, in JSON format
     nlohmann::json _topology;
 
 }; // class Host
