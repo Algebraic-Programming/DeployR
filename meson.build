@@ -38,6 +38,7 @@ deployrDependencies += HopcroftKarpBuildDep
 
 if engine == 'mpi'
 DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_MPI'
+mpirunExecutable = find_program('mpirun', '/usr/bin/mpirun', '/usr/local/bin/mpirun', required : true)
 endif
 
 if engine == 'lpf'

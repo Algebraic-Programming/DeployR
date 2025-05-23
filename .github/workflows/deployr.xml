@@ -41,35 +41,13 @@ jobs:
             sudo apt install -y libtclap-dev
     - name: Installing meson, ninja and gcovr
       run: python3 -m pip install meson ninja gcovr
-    - name: Install OVNI 
-      run:  |
-            git clone --recursive https://github.com/bsc-pm/ovni.git $HOME/ovni
-            cd $HOME/ovni
-            mkdir build
-            cd build
-            cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_TESTING=FALSE
-            make -j8
-            sudo make install
-            sudo rm -rf $HOME/ovni
-    - name: Install NOS-V 
-      run:  |
-            git clone -b 3.1.0 --recursive https://github.com/bsc-pm/nos-v.git $HOME/nos-v
-            cd $HOME/nos-v
-            autoreconf -f -i -v
-            ./configure --prefix=/usr/local --with-ovni=/usr/local
-            make all
-            sudo make install
-            cd ..
-            rm -rf $HOME/nos-v
-            sudo sed -i '/^\[instrumentation\]/,/^\[/{s/version *= *"none"/version = "ovni"/}' /usr/local/share/nosv.toml 
-            sudo sed -i '/^\[ovni\]/,/^\[/{s/level *= *2/level = 0/}' /usr/local/share/nosv.toml
     - name: Updating submodules 
       run: git submodule update --init --recursive
     - name: Building all modules
       run:  |
             echo "Building..."
             mkdir build
-            meson setup build -DdistributedEngine=mpi -DbuildTests=true -DbuildExamples=true -DcompileWarningsAsErrors=true
+            meson setup build -Dengine=mpi -DbuildTests=true -DbuildExamples=true -DcompileWarningsAsErrors=true
             meson compile -C build
     - name: Running tests 
       run:  |

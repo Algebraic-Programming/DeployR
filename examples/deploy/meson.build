@@ -1,8 +1,8 @@
 testSuite = [ 'examples', 'deploy' ]
 
-deploy = executable('deploy', [ 'deploy.cpp'], dependencies: [ DeployRBuildDep ])
-
-if get_option('buildTests')
-	test('deploy', deploy, args : [ ], suite: testSuite, workdir: deploy.path() + '.p' )
+if engine == 'mpi'
+	mpi = executable('deploy', [ 'deploy.cpp'], dependencies: DeployRBuildDep)
+	if get_option('buildTests')
+	  test('mpi', mpirunExecutable, args : [ '-np', '3', mpi.full_path(), meson.current_source_dir() + '/request.json'], timeout: 60, suite: testSuite )
+	endif
 endif
-
