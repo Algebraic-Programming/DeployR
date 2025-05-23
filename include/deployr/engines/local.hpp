@@ -15,21 +15,20 @@ class Local final : public deployr::Engine
 {
   public:
 
-  Local() : deployr::Engine()
-  {
-
-  }
+  Local()
+    : deployr::Engine()
+  {}
 
   ~Local() = default;
 
-  __INLINE__ void initializeManagers(int* pargc, char*** pargv) override
+  __INLINE__ void initializeManagers(int *pargc, char ***pargv) override
   {
     // Reserving memory for hwloc
     hwloc_topology_init(&_topology);
 
-    _instanceManager = HiCR::backend::hwloc::InstanceManager::createDefault(pargc, pargv);
+    _instanceManager      = HiCR::backend::hwloc::InstanceManager::createDefault(pargc, pargv);
     _communicationManager = std::make_unique<HiCR::backend::pthreads::CommunicationManager>();
-    _memoryManager = std::make_unique<HiCR::backend::hwloc::MemoryManager>(&_topology);
+    _memoryManager        = std::make_unique<HiCR::backend::hwloc::MemoryManager>(&_topology);
   };
 
   __INLINE__ void finalize() override
@@ -40,15 +39,11 @@ class Local final : public deployr::Engine
     _instanceManager->finalize();
   }
 
-  __INLINE__ void abort() override
-  {
-    std::abort();
-  }
+  __INLINE__ void abort() override { std::abort(); }
 
   private:
 
   hwloc_topology_t _topology;
-
 };
 
 } // namespace deployr::engine

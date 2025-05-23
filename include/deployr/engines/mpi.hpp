@@ -15,32 +15,24 @@ class MPI final : public deployr::Engine
 {
   public:
 
-  MPI() : deployr::Engine()
-  {
-    
-  }
+  MPI()
+    : deployr::Engine()
+  {}
 
   ~MPI() = default;
 
-  __INLINE__ void initializeManagers(int* pargc, char*** pargv) override
+  __INLINE__ void initializeManagers(int *pargc, char ***pargv) override
   {
-    _instanceManager = HiCR::backend::mpi::InstanceManager::createDefault(pargc, pargv);
+    _instanceManager      = HiCR::backend::mpi::InstanceManager::createDefault(pargc, pargv);
     _communicationManager = std::make_unique<HiCR::backend::mpi::CommunicationManager>(MPI_COMM_WORLD);
-    _memoryManager = std::make_unique<HiCR::backend::mpi::MemoryManager>();
+    _memoryManager        = std::make_unique<HiCR::backend::mpi::MemoryManager>();
   };
 
-  __INLINE__ void finalize() override
-  {
-    _instanceManager->finalize();
-  }
+  __INLINE__ void finalize() override { _instanceManager->finalize(); }
 
-  __INLINE__ void abort() override
-  {
-    MPI_Abort(MPI_COMM_WORLD, 1);
-  }
-  
+  __INLINE__ void abort() override { MPI_Abort(MPI_COMM_WORLD, 1); }
+
   private:
-
 };
 
 } // namespace deployr::engine
