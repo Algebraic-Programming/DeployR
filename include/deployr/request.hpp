@@ -76,6 +76,12 @@ class Request final
 
         Device() = delete;
         ~Device() = default;
+
+        /**
+         * Deserializing constructor for the device request
+         * 
+         * @param[in] deviceJs A JSON-encoded device request information
+         */
         Device(const nlohmann::json& deviceJs)
         {
           // Parsing device type
@@ -85,17 +91,37 @@ class Request final
           _count = hicr::json::getNumber<size_t>(deviceJs, "Count");
         }
 
+        /**
+         * Gets the device type
+         * 
+         * @return The device type
+         */
         [[nodiscard]] __INLINE__ const std::string& getType() const { return _type; }
+
+        /**
+         * Gets the device count. I.e., the number of instances of the devices to look for
+         * 
+         * @return The device count required
+         */
         [[nodiscard]] __INLINE__ const std::size_t getCount() const { return _count; }
 
         private:
 
+        /// The type of the device, to use to check whether the host contains such a device
         std::string _type;
+
+        /// The number of such devices to look for
         size_t _count;
       }; // class Device
 
       HostType() = default;
       ~HostType() = default;
+
+      /**
+       * Deserializing constructor for the hostType class
+       * 
+       * @param[in] hostTypeJs a JSON-encoded data
+       */
       HostType(const nlohmann::json& hostTypeJs)
       {
         // Parsing hostType name
@@ -113,16 +139,46 @@ class Request final
         for (const auto& deviceJs : devicesJs) _devices.push_back(Device(deviceJs));
       }
 
+      /**
+       * Gets the minimum memory (in GB) required by this host type
+       * 
+       * @return the minimum memory (in GB) required by this host type
+       */
       [[nodiscard]] __INLINE__ const size_t getMinMemoryGB() const { return _minMemoryGB; }
+
+      /**
+       * Gets the minimum processing units required by this host type
+       * 
+       * @return the minimum processing units required by this host type
+       */
       [[nodiscard]] __INLINE__ const size_t getMinProcessingUnits() const { return _minProcessingUnits; }
+
+      /**
+       * Gets the devices required by this host type
+       * 
+       * @return the devices required by this host type
+       */
       [[nodiscard]] __INLINE__ const std::vector<Device>& getDevices() const { return _devices; }
+
+      /**
+       * Gets the host type name. 
+       * 
+       * @return the host type name
+       */
       [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
 
       private: 
 
+      /// The name associated to this host type. This value will be used to link instance requirements to corresponding host type
       std::string _name;
+
+      /// Minimum memory (GB) required by this host type
       size_t _minMemoryGB;
+
+      /// Minimum processing units required by this host type
       size_t _minProcessingUnits;
+
+      /// Set of devices required by this host type
       std::vector<Device> _devices;
 
     }; // class HostType
@@ -136,6 +192,12 @@ class Request final
 
       Instance() = default;
       ~Instance() = default;
+
+      /**
+      * Deserializing constructor for the Instance class
+      * 
+      * @param[in] instanceJs a JSON-encoded data
+      */
       Instance(const nlohmann::json& instanceJs)
       {
         // Parsing hostType name
@@ -148,20 +210,47 @@ class Request final
         _function = hicr::json::getString(instanceJs, "Function");
       }
 
+      /**
+       * Gets the name of the instance
+       * 
+       * @return the name of the instance
+       */
       [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
+
+      /**
+       * Gets the initial function for this instance
+       * 
+       * @return the initial function for this instance
+       */
       [[nodiscard]] __INLINE__ const std::string& getFunction() const { return _function; }
+
+      /**
+       * Gets the host type required for this instance
+       * 
+       * @return the host type required for this instance
+       */
       [[nodiscard]] __INLINE__ const std::string& getHostType() const { return _hostType; }
 
       private:
 
+      /// Name assigned to this instance request
       std::string _name;
+
+      /// Function for this instance to run as it is deployed
       std::string _function;
+
+      /// Host type name that describes the hardware topology required by this instance request
       std::string _hostType;
     }; // class Instance
 
     Request() = default;
     ~Request() = default;
 
+      /**
+      * Deserializing constructor for the Request class
+      * 
+      * @param[in] requestJs a JSON-encoded data
+      */
     Request(const nlohmann::json& requestJs) : _requestJs(requestJs)
     {
       // Parsing name
@@ -225,11 +314,39 @@ class Request final
       }
     }
 
+    /**
+     * Gets the host type map
+     * 
+     * @return the host type map
+     */
     [[nodiscard]] __INLINE__ const std::map<std::string, HostType>& getHostTypes() const { return _hostTypes; }
+
+    /**
+     * Gets the instance map
+     * 
+     * @return the instance map
+     */
     [[nodiscard]] __INLINE__ const std::map<std::string, Instance>& getInstances() const { return _instances; }
+
+    /**
+     * Gets the channel vector
+     * 
+     * @return the channel vector
+     */
     [[nodiscard]] __INLINE__ const std::vector<Channel>& getChannels() const { return _channels; }
+
+    /**
+     * Gets the request name
+     * 
+     * @return the request name
+     */
     [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
 
+    /**
+     * Serialization function for this request
+     * 
+     * @return The original JSON-encoded data used to create this request
+     */
     [[nodiscard]] __INLINE__ nlohmann::json serialize() const
     {
         // Since this is a static object, simply return originating JSON
@@ -238,10 +355,19 @@ class Request final
 
     private: 
 
+    /// The original JSON-encoded request used to create this object
     nlohmann::json _requestJs;
+
+    /// The name of the request
     std::string _name;
+
+    /// A map of host types associated to this request, indexed by name
     std::map<std::string, HostType> _hostTypes;
+
+    /// A map of instances requested, indexed by name
     std::map<std::string, Instance> _instances;
+
+    /// An array of channels that are required to be created upon deployment
     std::vector<Channel> _channels;
 
 }; // class Request
