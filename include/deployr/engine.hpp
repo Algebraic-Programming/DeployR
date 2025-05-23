@@ -30,6 +30,8 @@ namespace deployr
 {
 
 /**
+ * HiCR Management Engine for DeployR
+ * 
  * Instantiates device-specific HiCR backends and resolves the detection of the system topology and channel creation.
  */
 class Engine

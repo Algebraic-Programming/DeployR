@@ -33,6 +33,9 @@ class DeployR final
 {
  public:
 
+  /**
+   * Default constructor for DeployR. It creates the HiCR management engine and registers the basic functions needed during deployment.
+   */
   DeployR()
   {
     // Instantiating distributed execution engine
@@ -67,6 +70,15 @@ class DeployR final
 
   ~DeployR() = default;
 
+  /**
+   * The initialization function for DeployR.
+   * 
+   * It initializes the HiCR management engine, detects the local topology, broadcasts the global topology to the root instance.
+   * All instances need to be call this function before the root instance can request a deployment. Only the root instance will continue thereafter. 
+   * 
+   * @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+   * @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+   */
   __INLINE__ void initialize(int* pargc, char*** pargv)
   {
     // Initializing distributed execution engine
@@ -92,7 +104,7 @@ class DeployR final
       //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
 
       // Identifying local instance
-      identifyLocalInstance();
+      _localInstance = identifyLocalInstance();
 
       // Creating communication channels
       createChannels();
@@ -108,6 +120,14 @@ class DeployR final
     }
   }
 
+  /**
+   * Attempts to deploy a deployment request. 
+   * 
+   * If not enough (or too many) hosts are detected than the request needs, it will abort execution.
+   * If a good mapping is found, it will run each of the requested instance in one of the found hosts and run its initial function.
+   * 
+   * @param[in] request A request object containing all the required instances and channels that make a deployment.
+   */
   __INLINE__ void deploy(Request& request)
   {
     // Counting the exact number of instances requested.
@@ -163,7 +183,7 @@ class DeployR final
     // Proceed with request to instance matching
     if (_deployment.performMatching() == false)
     {
-      fprintf(stderr, "[DeployR] The provided resources are not sufficient for the requested instances.\n");
+      fprintf(stderr, "[DeployR] The detected hosts are not sufficient for the requested instances.\n");
       _engine->abort();
     } 
 
@@ -171,7 +191,7 @@ class DeployR final
     broadcastDeployment();
 
     // Identifying this local instance
-    identifyLocalInstance();
+    _localInstance = identifyLocalInstance();
 
     // Creating communication channels
     createChannels();
@@ -180,6 +200,15 @@ class DeployR final
     runInitialFunction();
   }
 
+  /**
+   * Registers a function that can be a target as initial function for one or more requested instances.
+   * 
+   * If a requested initial function is not registered by this function, deployment will fail.
+   * 
+   * @param[in] functionName The name of the function to register. This value will be used to match against the requested instance functions
+   * @param[in] fc The actual function to register
+   * 
+   */
   __INLINE__ void registerFunction(const std::string& functionName, std::function<void()> fc)
   {
     // Checking if the RPC name was already used
@@ -193,6 +222,14 @@ class DeployR final
     _registeredFunctions.insert({functionName, fc});
   }
 
+  /**
+   * Retrieves one of the channels creates during deployment.
+   * 
+   * If the provided name is not registered for this instance, the function will produce an exception.
+   * 
+   * @param[in] name The name of the channel to retrieve
+   * @return The requested channel
+   */
   __INLINE__ Channel& getChannel(const std::string& name)
   {
     if (_channels.contains(name) == false) HICR_THROW_LOGIC("Requested channel ('%s') is not defined for this instance ('%s')\n", name.c_str(), _localInstance.getName().c_str());
@@ -200,18 +237,57 @@ class DeployR final
     return _channels.at(name).operator*();
   }
 
+  /**
+   * Retrieves a deployment object with the information about the deployment (pairings, hosts, channels, request)
+   * 
+   * This function must be called only after deploying
+   * 
+   * @return The deployment object
+   */
   [[nodiscard]] __INLINE__ const Deployment& getDeployment() const { return _deployment; }
+
+  /**
+   * Retrieves the instance request corresponding to the local running instance
+   * 
+   * This function must be called only after initializing
+   * 
+   * @return The instance request object
+   */
   [[nodiscard]] __INLINE__ const Request::Instance& getLocalInstance() const { return _localInstance; }
+
+  /**
+   * Finalizes the deployment. Must be called by the root instance before exiting the applicataion
+   */
   __INLINE__ void finalize() { _engine->finalize(); }
+
+  /**
+   * Fatally aborts execution. Must be used only in case of unsalvageable errors.
+   */
   __INLINE__ void abort() { _engine->abort(); }
 
   private:
 
+  /**
+   * [Internal] Gets an array of HiCR instances, each one representing a Host
+   * 
+   * @return An array containing the HiCR instances detected/created
+   */
   __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _engine->getHiCRInstances(); }
 
+  /**
+   * [Internal] Checks whether the currently running instance is root
+   * 
+   * @return true, if this is a root instance. false, otherwise.
+   */
   [[nodiscard]] __INLINE__ bool isRootInstance() const { return _engine->isRootInstance(); }
 
-  __INLINE__ void launchFunction(const size_t resourceIdx, const std::string& functionName)
+  /**
+   * [Internal] Launches a provided function on the requested host
+   * 
+   * @param[in] hostIdx The index within the HiCR instanceList_t corresponding to the host that should execute the function (RPC)
+   * @param[in] functionName The name of the function to run. It must be registered on the target host before running
+   */
+  __INLINE__ void launchFunction(const size_t hostIdx, const std::string& functionName)
   {
     if (_registeredFunctions.contains(functionName) == false)
     {
@@ -219,9 +295,14 @@ class DeployR final
         abort();
     } 
 
-    _engine->launchRPC(resourceIdx, functionName);
+    _engine->launchRPC(hostIdx, functionName);
   }
 
+  /**
+   * [Internal] Gets the global topology, the sum of all local topologies
+   * 
+   * @return A vector containing each of the local topologies, where the index corresponds to the host index in the getHiCRInstances function
+   */
   [[nodiscard]] __INLINE__ std::vector<nlohmann::json> gatherGlobalTopology()
   {
       // Storage
@@ -263,6 +344,11 @@ class DeployR final
       return globalTopology;
   }
 
+  /**
+   * [Internal] Makes the root instance broadcast the serialized deployment information to all others and deserializes it locally.
+   * 
+   * @return The deserialized Deployment object
+   */
   __INLINE__ Deployment broadcastDeployment()
   {
       // Storage
@@ -304,6 +390,9 @@ class DeployR final
       return deployment;
   }
 
+  /**
+   * Creates all requested channels in the request
+   */
   __INLINE__ void createChannels()
   {
     // Getting original request
@@ -357,7 +446,12 @@ class DeployR final
     }
   }
 
-  __INLINE__ void identifyLocalInstance()
+  /**
+   * [Internal] Detects which of the instances in the request corresponds to this local instance
+   * 
+   * @return An instance request object corresponding to the local instance
+   */
+  __INLINE__ deployr::Request::Instance identifyLocalInstance()
   {
         // Getting pairings
         const auto& pairings = _deployment.getPairings();
@@ -367,9 +461,12 @@ class DeployR final
         for (const auto& p : pairings) if (p.second == _localHostIndex) { localInstanceName = p.first; break; }
     
         // Getting requested instance's information
-        _localInstance = _deployment.getRequest().getInstances().at(localInstanceName);
+        return _deployment.getRequest().getInstances().at(localInstanceName);
   }
 
+ /**
+ * [Internal] Runs the initial function assigned to this instance
+ */
   __INLINE__ void runInitialFunction()
   {
     // Getting the function to run for the paired instance
@@ -389,27 +486,30 @@ class DeployR final
     initialFc();
   }
 
-  bool _continueExecuting = true;
+  /// A pointer to the HiCR Manager Engine used to run low-level operations
   std::unique_ptr<Engine> _engine;
 
+  /// A map of registered functions, targets for an instance's initial function
   std::map<std::string, std::function<void()>> _registeredFunctions;
   
-  // Local instance object
+  /// Local instance object
   Request::Instance _localInstance;
 
-  // Index of this host on the deployment
+  /// Index of this host on the deployment
   size_t _localHostIndex;
 
-  // Storage for the local system topology
+  /// Storage for the local system topology
   nlohmann::json _localTopology;
 
-  // Storage for the global system topology
+  /// Storage for the global system topology
   std::vector<nlohmann::json> _globalTopology;
 
-  // Map of channels
+  /// Map of created channels
   std::map<std::string, std::shared_ptr<Channel>> _channels;
 
+  // Object containing the information of the deployment
   Deployment _deployment;
+  
 }; // class DeployR
 
 } // namespace deployr
