@@ -41,7 +41,18 @@ class Engine
     Engine() = default;
     virtual ~Engine() = default;
 
+    /**
+     * Gets a collection, ordered by index, of all the detected / created HiCR instances
+     */
     [[nodiscard]] __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _instanceManager->getInstances(); }
+
+    /**
+     *  Initializes the internal HiCR managers required for DeployR and those chosen by the user. 
+     *  It instantiates and initializes the RPC engine for sending functions across instances.
+     * 
+     *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+     *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+     */
     __INLINE__ void initialize(int* pargc, char*** pargv)
     {
         // initialize engine-specific managers
@@ -90,9 +101,25 @@ class Engine
         _rpcEngine->initialize();
     };
 
+    /**
+     * Function to fatally abort execution in all instances. 
+     * It can be called by any one instance.
+     * It delegates the implementation to the configured backends
+     */
     virtual void abort() = 0;
+
+    /**
+     * Function to normally finalize execution.
+     * It must be called by all instances.
+     * It delegates the implementation to the configured backends
+     */
     virtual void finalize() = 0;
 
+    /**
+     * Gets the index within the HiCR instance list corresponding to this local instance
+     * 
+     * @return The index corresponding to this instance
+     */
     [[nodiscard]] __INLINE__ size_t getLocalInstanceIndex() const
     {
         const auto localHostInstanceId = _instanceManager->getCurrentInstance()->getId();
@@ -105,8 +132,18 @@ class Engine
         return 0;
     }
 
+    /**
+     * Indicates whether the local instance is the HiCR root instance
+     * 
+     * @return true, if this is the root instance; false, otherwise.
+     */
     [[nodiscard]] __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
 
+    /**
+     * Gets the HiCR instance object corresponding to the root instance
+     * 
+     * @return A HiCR instance object corresponding to the root instance
+     */
     __INLINE__ HiCR::Instance& getRootInstance() const
     { 
       auto& instances = _instanceManager->getInstances();
@@ -114,6 +151,11 @@ class Engine
       return *(instances[0]);
     }
 
+    /**
+     * Gets the index within the HiCR instance list corresponding to the root instance
+     * 
+     * @return The index within the HiCR instance list corresponding to the root instance
+     */
     [[nodiscard]] __INLINE__ size_t getRootInstanceIndex() const
     { 
       const auto& instances = _instanceManager->getInstances();
@@ -121,6 +163,12 @@ class Engine
       return 0;
     }
 
+    /**
+     * Registers a function as target for an RPC
+     * 
+     * @param[in] RPCName The name of the function to register
+     * @param[in] fc The actual function to register
+     */
     __INLINE__ void registerRPC(const std::string& RPCName, std::function<void()> fc)
     {
         // Registering RPC
@@ -130,8 +178,19 @@ class Engine
         _rpcEngine->addRPCTarget(RPCName, RPCExecutionUnit);
     }
     
+    /**
+     * Executes one pending RPC request or suspends the current instance in wait for the next arriving RPC
+     * 
+     * @note This function will not return until and unless an RPC has executed
+     */
     __INLINE__ void listenRPCs() { _rpcEngine->listen(); }
 
+    /**
+     * Function to request the execution of an RPC in a remote instance
+     * 
+     * @param[in] instanceIndex Index within the HiCR instance list corresponding to the instance that must execute this RPC
+     * @param[in] RPCName Name of the function to run. It must have been registered in the target instance beforehand to work
+     */
     __INLINE__ void launchRPC(const size_t instanceIndex, const std::string& RPCName)
     {
         auto& instances = _instanceManager->getInstances();
