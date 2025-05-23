@@ -24,6 +24,12 @@ class Request final
 
       Channel() = delete;
       ~Channel() = default;
+
+      /**
+       * Deserializing constructor for a channel request
+       * 
+       * @param[in] channelJs A JSON-encoded channel request information
+       */
       Channel(const nlohmann::json& channelJs)
       {
         // Parsing channel name
@@ -45,18 +51,56 @@ class Request final
         _bufferSize = hicr::json::getNumber<size_t>(channelJs, "Buffer Size (Bytes)");
       }
 
+      /**
+       * Gets the channel name
+       * 
+       * @return the channel name
+       */
       [[nodiscard]] __INLINE__ const std::string& getName() const { return _name; }
+
+      /**
+       * Gets the list of channel producers
+       * 
+       * @return the list of channel producers
+       */
       [[nodiscard]] __INLINE__ const std::vector<std::string>& getProducers() const { return _producers; }
+
+      /**
+       * Gets the channel consumer
+       * 
+       * @return the channel consumer
+       */
       [[nodiscard]] __INLINE__ const std::string& getConsumer() const { return _consumer; }
+
+      /**
+       * Gets the buffer capacity
+       * 
+       * @return the buffer capacity
+       */
       [[nodiscard]] __INLINE__ const size_t getBufferCapacity() const { return _bufferCapacity; }
+
+      /**
+       * Gets the buffer size
+       * 
+       * @return the buffer size (bytes)
+       */
       [[nodiscard]] __INLINE__ const size_t getBufferSize() const { return _bufferSize; }
 
       private:
 
+      /// The channel name. This value will be used by the user to retrieve the corresponding channel object
       std::string _name;
+
+      /// List of producers for this channel. Identifies instances by their name
       std::vector<std::string> _producers;
+
+      /// Consumer for this channel. Identifies an instance by its name
       std::string _consumer;
+
+      /// Buffer capacity requested for this channel. It indicates how many messages can be stored in buffer at any given time
       size_t _bufferCapacity;
+
+      /// Buffer size (in bytes) requested for this channel. It indicates how many bytes can be stored in the buffer
       size_t _bufferSize;
     }; // class Channel
 
