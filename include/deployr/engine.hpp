@@ -60,16 +60,11 @@ class Engine
     // initialize engine-specific managers
     initializeManagers(pargc, pargv);
 
-    // Initializing topology managers, as configured
-
-    // Creating HWloc topology object
-    auto topology = new hwloc_topology_t;
-
     // Reserving memory for hwloc
-    hwloc_topology_init(topology);
+    hwloc_topology_init(&_hwlocTopology);
 
     // Initializing HWLoc-based host (CPU) topology manager
-    auto hwlocTopologyManager = std::make_unique<HiCR::backend::hwloc::TopologyManager>(topology);
+    auto hwlocTopologyManager = std::make_unique<HiCR::backend::hwloc::TopologyManager>(&_hwlocTopology);
 
     // Adding topology manager to the list
     _topologyManagers.push_back(std::move(hwlocTopologyManager));
@@ -441,6 +436,9 @@ class Engine
 
   /// First device to use as buffer source
   std::shared_ptr<HiCR::Device> _firstDevice;
+
+  /// Hwloc topology object
+  hwloc_topology_t _hwlocTopology;
 
 }; // class Engine
 
