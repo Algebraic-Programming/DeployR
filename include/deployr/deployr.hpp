@@ -53,7 +53,7 @@ class DeployR final
       const auto serializedTopology = _localTopology.dump();
 
       // Returning serialized topology
-      _engine->submitRPCReturnValue((void *)serializedTopology.c_str(), serializedTopology.size());
+      _engine->submitRPCReturnValue((void *)serializedTopology.c_str(), serializedTopology.size() + 1);
     });
 
     // Registering deployment broadcasting RPC
@@ -62,7 +62,7 @@ class DeployR final
       const auto serializedDeployment = _deployment.serialize().dump();
 
       // Returning serialized topology
-      _engine->submitRPCReturnValue((void *)serializedDeployment.c_str(), serializedDeployment.size());
+      _engine->submitRPCReturnValue((void *)serializedDeployment.c_str(), serializedDeployment.size() + 1);
     });
   }
 
