@@ -181,7 +181,7 @@ class DeployR final
     // Proceed with request to instance matching
     if (_deployment.performMatching() == false)
     {
-      fprintf(stderr, "[DeployR] The detected hosts (%lu) are either not sufficient for the requested instances (%lu) or their topology doesn't satisfy that of the requested instances.\n");
+      fprintf(stderr, "[DeployR] The detected hosts (%lu) are either not sufficient for the requested instances (%lu) or their topology doesn't satisfy that of the requested instances.\n", HiCRInstanceCount, instancesRequested);
       _engine->abort();
     }
 
