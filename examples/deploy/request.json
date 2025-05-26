@@ -17,13 +17,13 @@
             "Name": "Compute",
             "Topology":
             {
-                "Minimum Host Processing Units": 16,
-                "Minimum Host RAM (GB)": 64,
+                "Minimum Host Processing Units": 2,
+                "Minimum Host RAM (GB)": 4,
                 "Devices":
                 [
                     {
                         "Type": "NUMA Domain",
-                        "Count": 2
+                        "Count": 1
                     }
                 ]
             }
