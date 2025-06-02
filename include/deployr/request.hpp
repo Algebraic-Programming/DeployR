@@ -133,7 +133,7 @@ class Request final
         _type = hicr::json::getString(deviceJs, "Type");
 
         // Min host capabilities
-        _minMemoryGB        = hicr::json::getNumber<size_t>(deviceJs, "Minimum Memory (GB)");
+        _minMemoryGB         = hicr::json::getNumber<size_t>(deviceJs, "Minimum Memory (GB)");
         _minComputeResources = hicr::json::getNumber<size_t>(deviceJs, "Minimum Compute Resources");
       }
 

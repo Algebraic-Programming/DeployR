@@ -49,8 +49,8 @@ class Host final
 
     for (const auto &requestedDevice : requestedDevices)
     {
-      const auto requestedDeviceType  = requestedDevice.getType();
-      const auto requestedDeviceMemoryGB = requestedDevice.getMinMemoryGB();
+      const auto requestedDeviceType             = requestedDevice.getType();
+      const auto requestedDeviceMemoryGB         = requestedDevice.getMinMemoryGB();
       const auto requestedDeviceComputeResources = requestedDevice.getMinComputeResources();
 
       // Iterating over all the host devices to see if one of them satisfies this requested device
@@ -58,15 +58,15 @@ class Host final
       for (auto hostDeviceItr = hostDevices.begin(); hostDeviceItr != hostDevices.end() && foundCompatibleDevice == false; hostDeviceItr++)
       {
         // Getting host device object
-        const auto& hostDevice = hostDeviceItr.operator*();
+        const auto &hostDevice = hostDeviceItr.operator*();
 
         // Checking type
-        const auto& hostDeviceType = hicr::json::getString(hostDevice, "Type");
+        const auto &hostDeviceType = hicr::json::getString(hostDevice, "Type");
         if (hostDeviceType == requestedDeviceType)
         {
           ///// Checking available memory
-          size_t actualHostDeviceMemoryBytes = 0;
-          const auto &memorySpaces = hicr::json::getArray<nlohmann::json>(hostDevice, "Memory Spaces");
+          size_t      actualHostDeviceMemoryBytes = 0;
+          const auto &memorySpaces                = hicr::json::getArray<nlohmann::json>(hostDevice, "Memory Spaces");
           for (const auto &memorySpace : memorySpaces)
           {
             const auto &memorySpaceSize = hicr::json::getNumber<size_t>(memorySpace, "Size");
@@ -77,9 +77,9 @@ class Host final
           const size_t actualHostDeviceMemoryGB = actualHostDeviceMemoryBytes / (1024ul * 1024ul * 1024ul);
 
           ///// Checking requested compute resources
-          const auto &computeResources = hicr::json::getArray<nlohmann::json>(hostDevice, "Compute Resources");
-          size_t actualHostDeviceComputeResources = computeResources.size();
-          
+          const auto &computeResources                 = hicr::json::getArray<nlohmann::json>(hostDevice, "Compute Resources");
+          size_t      actualHostDeviceComputeResources = computeResources.size();
+
           // Checking if conditions have been satisfied.
           if (actualHostDeviceComputeResources >= requestedDeviceComputeResources && actualHostDeviceMemoryGB >= requestedDeviceMemoryGB)
           {
@@ -88,7 +88,7 @@ class Host final
 
             // Deleting device to prevent it from being counted again
             hostDevices.erase(hostDeviceItr);
-          } 
+          }
         }
       }
 
