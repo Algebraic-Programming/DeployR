@@ -29,8 +29,10 @@ class Host final
 
   /**
     * Checks whether this host satisfied a certain host type.
-    * That is, whether it contains the minimuim memory and processing units required, and that all the devices
-    * enumerated within the host type are present in this device
+    * That is, whether it contains the requested devices in the host type provided
+    *
+    * The devices are checked in order. That is the first host device that satisfies a requested device
+    * will be removed from the list when checking the next requested device.
     * 
     * @param[in] hostType The host type requested to check for
     * 
@@ -38,82 +40,60 @@ class Host final
     */
   [[nodiscard]] __INLINE__ bool checkCompatibility(const Request::HostType &hostType)
   {
-    ////////// Checking whether the _topology contains the minimum host memory
-    const auto minHostMemoryGB = hostType.getMinMemoryGB();
-
-    // Getting topology's devices
-    const auto &devices = hicr::json::getArray<nlohmann::json>(_topology, "Devices");
-
-    // Looking for NUMA Domain device to add up to the actual memory
-    size_t actualHostMemoryBytes = 0;
-    for (const auto &device : devices)
-    {
-      const auto &deviceType = hicr::json::getString(device, "Type");
-      if (deviceType == "NUMA Domain")
-      {
-        const auto &memorySpaces = hicr::json::getArray<nlohmann::json>(device, "Memory Spaces");
-        for (const auto &memorySpace : memorySpaces)
-        {
-          const auto &memorySpaceType = hicr::json::getString(memorySpace, "Type");
-          if (memorySpaceType == "RAM")
-          {
-            const auto &memorySpaceSize = hicr::json::getNumber<size_t>(memorySpace, "Size");
-            actualHostMemoryBytes       = memorySpaceSize;
-          }
-        }
-      }
-    }
-
-    // Calculating GB
-    const size_t actualHostMemoryGB = actualHostMemoryBytes / (1024ul * 1024ul * 1024ul);
-
-    // Returning false if not enough host memory found
-    if (actualHostMemoryGB < minHostMemoryGB) return false;
-
-    ////////// Checking whether the _topology contains the minimum processing units
-    const auto minHostProcessingUnits = hostType.getMinProcessingUnits();
-
-    // Looking for NUMA Domain device to add up the number of processing units
-    size_t actualHostProcessingUnits = 0;
-    for (const auto &device : devices)
-    {
-      const auto &deviceType = hicr::json::getString(device, "Type");
-      if (deviceType == "NUMA Domain")
-      {
-        const auto &computeResources = hicr::json::getArray<nlohmann::json>(device, "Compute Resources");
-        for (const auto &computeResource : computeResources)
-        {
-          const auto &computeResourceType = hicr::json::getString(computeResource, "Type");
-          if (computeResourceType == "Processing Unit") actualHostProcessingUnits++;
-        }
-      }
-    }
-
-    // Returning false if not enough processing units found
-    if (actualHostProcessingUnits < minHostProcessingUnits) return false;
-    // printf("Found %luGB - %lu PUs\n", actualHostMemoryGB, actualHostProcessingUnits);
+    // Making a copy of the host topology.
+    // Devices will be removed as we match them with the requested device
+    auto hostDevices = hicr::json::getArray<nlohmann::json>(_topology, "Devices");
 
     ////////// Checking for requested devices
-    const auto requestedDevices = hostType.getDevices();
+    const auto requestedDevices = hostType.getTopology();
 
     for (const auto &requestedDevice : requestedDevices)
     {
       const auto requestedDeviceType  = requestedDevice.getType();
-      const auto requestedDeviceCount = requestedDevice.getCount();
+      const auto requestedDeviceMemoryGB = requestedDevice.getMinMemoryGB();
+      const auto requestedDeviceComputeResources = requestedDevice.getMinComputeResources();
 
-      // Looking for NUMA Domain device to add up the number of processing units
-      size_t actualDeviceCount = 0;
-      for (const auto &device : devices)
+      // Iterating over all the host devices to see if one of them satisfies this requested device
+      bool foundCompatibleDevice = false;
+      for (auto hostDeviceItr = hostDevices.begin(); hostDeviceItr != hostDevices.end() && foundCompatibleDevice == false; hostDeviceItr++)
       {
-        const auto &deviceType = hicr::json::getString(device, "Type");
+        // Getting host device object
+        const auto& hostDevice = hostDeviceItr.operator*();
 
-        // printf("Comparing %s to %s\n", device->getType().c_str(), requestedDeviceType.c_str());
-        if (deviceType == requestedDeviceType) actualDeviceCount++;
+        // Checking type
+        const auto& hostDeviceType = hicr::json::getString(hostDevice, "Type");
+        if (hostDeviceType == requestedDeviceType)
+        {
+          ///// Checking available memory
+          size_t actualHostDeviceMemoryBytes = 0;
+          const auto &memorySpaces = hicr::json::getArray<nlohmann::json>(hostDevice, "Memory Spaces");
+          for (const auto &memorySpace : memorySpaces)
+          {
+            const auto &memorySpaceSize = hicr::json::getNumber<size_t>(memorySpace, "Size");
+            actualHostDeviceMemoryBytes += memorySpaceSize;
+          }
+
+          // Calculating GB
+          const size_t actualHostDeviceMemoryGB = actualHostDeviceMemoryBytes / (1024ul * 1024ul * 1024ul);
+
+          ///// Checking requested compute resources
+          const auto &computeResources = hicr::json::getArray<nlohmann::json>(hostDevice, "Compute Resources");
+          size_t actualHostDeviceComputeResources = computeResources.size();
+          
+          // Checking if conditions have been satisfied.
+          if (actualHostDeviceComputeResources >= requestedDeviceComputeResources && actualHostDeviceMemoryGB >= requestedDeviceMemoryGB)
+          {
+            // Set found compatible device to true
+            foundCompatibleDevice = true;
+
+            // Deleting device to prevent it from being counted again
+            hostDevices.erase(hostDeviceItr);
+          } 
+        }
       }
 
-      // printf("Actual device Count: %lu\n", actualDeviceCount);
-      // Failing if the require device count hasn't been met
-      if (actualDeviceCount < requestedDeviceCount) return false;
+      // If no host devices could satisfy the requested device, return false now
+      if (foundCompatibleDevice == false) return false;
     }
 
     // All requirements have been met, returning true

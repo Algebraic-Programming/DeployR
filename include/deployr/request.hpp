@@ -132,8 +132,9 @@ class Request final
         // Parsing device type
         _type = hicr::json::getString(deviceJs, "Type");
 
-        // Parsing device count
-        _count = hicr::json::getNumber<size_t>(deviceJs, "Count");
+        // Min host capabilities
+        _minMemoryGB        = hicr::json::getNumber<size_t>(deviceJs, "Minimum Memory (GB)");
+        _minComputeResources = hicr::json::getNumber<size_t>(deviceJs, "Minimum Compute Resources");
       }
 
       /**
@@ -144,19 +145,30 @@ class Request final
       [[nodiscard]] __INLINE__ const std::string &getType() const { return _type; }
 
       /**
-       * Gets the device count. I.e., the number of instances of the devices to look for
+       * Gets the minimum memory (in GB) required from this device
        * 
-       * @return The device count required
+       * @return the minimum memory (in GB) required from this device
        */
-      [[nodiscard]] __INLINE__ const std::size_t getCount() const { return _count; }
+      [[nodiscard]] __INLINE__ const size_t getMinMemoryGB() const { return _minMemoryGB; }
+
+      /**
+       * Gets the minimum processing units required from this device
+       * 
+       * @return the minimum processing units required from this device
+       */
+      [[nodiscard]] __INLINE__ const size_t getMinComputeResources() const { return _minComputeResources; }
 
       private:
 
       /// The type of the device, to use to check whether the host contains such a device
       std::string _type;
 
-      /// The number of such devices to look for
-      size_t _count;
+      /// Minimum memory (GB) required in this device
+      size_t _minMemoryGB;
+
+      /// Minimum compute resources required in this device
+      size_t _minComputeResources;
+
     }; // class Device
 
     HostType()  = default;
@@ -172,38 +184,17 @@ class Request final
       // Parsing hostType name
       _name = hicr::json::getString(hostTypeJs, "Name");
 
-      // Parsing topology
-      const auto topologyJs = hicr::json::getObject(hostTypeJs, "Topology");
-
-      // Min host capabilities
-      _minMemoryGB        = hicr::json::getNumber<size_t>(topologyJs, "Minimum Host RAM (GB)");
-      _minProcessingUnits = hicr::json::getNumber<size_t>(topologyJs, "Minimum Host Processing Units");
-
       // Parsing request devices
-      auto devicesJs = hicr::json::getArray<nlohmann::json>(topologyJs, "Devices");
-      for (const auto &deviceJs : devicesJs) _devices.push_back(Device(deviceJs));
+      auto topologyJs = hicr::json::getArray<nlohmann::json>(hostTypeJs, "Topology");
+      for (const auto &deviceJs : topologyJs) _topology.push_back(Device(deviceJs));
     }
 
     /**
-     * Gets the minimum memory (in GB) required by this host type
+     * Gets the topology required by this host type
      * 
-     * @return the minimum memory (in GB) required by this host type
+     * @return the topology required by this host type
      */
-    [[nodiscard]] __INLINE__ const size_t getMinMemoryGB() const { return _minMemoryGB; }
-
-    /**
-     * Gets the minimum processing units required by this host type
-     * 
-     * @return the minimum processing units required by this host type
-     */
-    [[nodiscard]] __INLINE__ const size_t getMinProcessingUnits() const { return _minProcessingUnits; }
-
-    /**
-     * Gets the devices required by this host type
-     * 
-     * @return the devices required by this host type
-     */
-    [[nodiscard]] __INLINE__ const std::vector<Device> &getDevices() const { return _devices; }
+    [[nodiscard]] __INLINE__ const std::vector<Device> &getTopology() const { return _topology; }
 
     /**
      * Gets the host type name. 
@@ -217,14 +208,8 @@ class Request final
     /// The name associated to this host type. This value will be used to link instance requirements to corresponding host type
     std::string _name;
 
-    /// Minimum memory (GB) required by this host type
-    size_t _minMemoryGB;
-
-    /// Minimum processing units required by this host type
-    size_t _minProcessingUnits;
-
-    /// Set of devices required by this host type
-    std::vector<Device> _devices;
+    /// Set of topology required by this host type
+    std::vector<Device> _topology;
 
   }; // class HostType
 

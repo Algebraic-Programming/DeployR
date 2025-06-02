@@ -6,27 +6,20 @@
         {
             "Name": "Entry",
             "Topology":
-            {
-                "Minimum Host Processing Units": 0,
-                "Minimum Host RAM (GB)": 0,
-                "Devices": [ ]
-            }
+            [
+            ]
         },
 
         {
             "Name": "Compute",
             "Topology":
-            {
-                "Minimum Host Processing Units": 2,
-                "Minimum Host RAM (GB)": 4,
-                "Devices":
-                [
-                    {
-                        "Type": "NUMA Domain",
-                        "Count": 1
-                    }
-                ]
-            }
+            [
+                {
+                    "Type": "NUMA Domain",
+                    "Minimum Memory (GB)": 8,
+                    "Minimum Compute Resources": 2
+                }
+            ]
         }
     ],
 
@@ -53,14 +46,14 @@
     [
         {
             "Name": "Coordinator -> Worker 1", 
-            "Producers": [ "Coordinator" ],
+            "Producer": "Coordinator",
             "Consumer": "Worker 1",
             "Buffer Capacity (Tokens)": 8,
             "Buffer Size (Bytes)": 1024 
         },
         {
             "Name": "Coordinator -> Worker 2",
-            "Producers": [ "Coordinator" ],
+            "Producer": "Coordinator",
             "Consumer": "Worker 2",
             "Buffer Capacity (Tokens)": 8,
             "Buffer Size (Bytes)": 1024
