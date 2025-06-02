@@ -46,14 +46,14 @@
     [
         {
             "Name": "Coordinator -> Worker 1", 
-            "Producer": "Coordinator",
+            "Producers": [ "Coordinator" ],
             "Consumer": "Worker 1",
             "Buffer Capacity (Tokens)": 8,
             "Buffer Size (Bytes)": 1024 
         },
         {
             "Name": "Coordinator -> Worker 2",
-            "Producer": "Coordinator",
+            "Producers": [ "Coordinator" ],
             "Consumer": "Worker 2",
             "Buffer Capacity (Tokens)": 8,
             "Buffer Size (Bytes)": 1024
