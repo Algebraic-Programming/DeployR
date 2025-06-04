@@ -79,7 +79,6 @@ class Deployment final
 
     //  Finding out if a proper matching exists
     auto matchCount = (size_t)graph.hopcroftKarpAlgorithm();
-    //printf("Match Count: %d\n", matchCount);
 
     // If the number of matchings is smaller than requested, return false
     if (matchCount < pairingsVector.size()) return false;

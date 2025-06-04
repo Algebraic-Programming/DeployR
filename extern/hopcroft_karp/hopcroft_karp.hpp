@@ -97,7 +97,6 @@
   */
  int HKGraph::hopcroftKarpAlgorithm()
  {
- 
      // pair_u[u] stores pair of u in matching on left side of Bipartite Graph.
      // If u doesn't have any pair, then pair_u[u] is NIL
      pair_u = std::vector<int>(m + 1,NIL); 
@@ -105,7 +104,14 @@
      // pair_v[v] stores pair of v in matching on right side of Biparite Graph.
      // If v doesn't have any pair, then pair_u[v] is NIL
      pair_v = std::vector<int>(n + 1,NIL); 
- 
+
+     // Fixing edge case where a 1:1 mapping is needed
+     if (m == 1 && n == 1 && adj[0].size() > 0)
+     {
+         pair_u[0] = 0;
+         return 1;
+     } 
+
      dist = std::vector<int>(m + 1);  // dist[u] stores distance of left side vertices
  
      int result = 0;  // Initialize result
