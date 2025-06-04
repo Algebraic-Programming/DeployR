@@ -130,6 +130,32 @@ class Channel final
     return true;
   }
 
+   /**
+   * Checks whether the channel is empty, or a message has arrived yet
+   * 
+   * @return true, if the channel is empty; false, otherwise.
+   */
+  __INLINE__ bool isEmpty() 
+  {
+    // Returning whether the consumer buffer of the channel is empty
+    if (_consumerInterface != nullptr) return _consumerInterface->isEmpty();
+    if (_producerInterface != nullptr) return _producerInterface->isEmpty();
+    HICR_THROW_FATAL("This channel '%s' contains no interfaces\n", _channelName.c_str());
+  }
+
+  /**
+   * Checks whether the channel is full
+   * 
+   * @return true, if the channel is full; false, otherwise.
+   */
+  __INLINE__ bool isFull() 
+  {
+    // Returning whether the consumer buffer of the channel is empty
+    if (_consumerInterface != nullptr) return _consumerInterface->isFull();
+    if (_producerInterface != nullptr) return _producerInterface->isFull();
+    HICR_THROW_FATAL("This channel '%s' contains no interfaces\n", _channelName.c_str());
+  }
+
   private:
 
   /// Unique identifier of the channel
