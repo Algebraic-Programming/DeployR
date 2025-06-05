@@ -266,7 +266,12 @@ class DeployR final
    */
   __INLINE__ void abort() { _engine->abort(); }
 
-  __INLINE__ HiCR::frontend::RPCEngine* getRPCEngine() { return _engine->getRPCEngine(); }
+  /**
+   * Retrieves the RPC engine for direct use
+   * 
+   * @return A pointer to the internal RPC engine
+   */
+  __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _engine->getRPCEngine(); }
 
   private:
 

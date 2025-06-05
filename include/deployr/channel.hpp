@@ -130,12 +130,12 @@ class Channel final
     return true;
   }
 
-   /**
+  /**
    * Checks whether the channel is empty, or a message has arrived yet
    * 
    * @return true, if the channel is empty; false, otherwise.
    */
-  __INLINE__ bool isEmpty() 
+  __INLINE__ bool isEmpty()
   {
     // Returning whether the consumer buffer of the channel is empty
     if (_consumerInterface != nullptr) return _consumerInterface->isEmpty();
@@ -148,7 +148,7 @@ class Channel final
    * 
    * @return true, if the channel is full; false, otherwise.
    */
-  __INLINE__ bool isFull() 
+  __INLINE__ bool isFull()
   {
     // Returning whether the consumer buffer of the channel is empty
     if (_consumerInterface != nullptr) return _consumerInterface->isFull();

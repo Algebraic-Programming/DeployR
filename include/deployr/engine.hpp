@@ -406,7 +406,12 @@ class Engine
     return topology.serialize();
   }
 
-  __INLINE__ HiCR::frontend::RPCEngine* getRPCEngine() { return _rpcEngine.get(); }
+  /**
+   * Retrieves a pointer to the RPC engine
+   * 
+   * @return A pointer to the RPC engine
+   */
+  __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _rpcEngine.get(); }
 
   protected:
 
