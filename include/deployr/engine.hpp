@@ -406,6 +406,8 @@ class Engine
     return topology.serialize();
   }
 
+  __INLINE__ HiCR::frontend::RPCEngine* getRPCEngine() { return _rpcEngine.get(); }
+
   protected:
 
   /**
