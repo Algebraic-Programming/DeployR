@@ -139,7 +139,11 @@ class Channel final
   {
     // Returning whether the consumer buffer of the channel is empty
     if (_consumerInterface != nullptr) return _consumerInterface->isEmpty();
-    if (_producerInterface != nullptr) return _producerInterface->isEmpty();
+    if (_producerInterface != nullptr)
+    {
+      _producerInterface->updateDepth();
+      return _producerInterface->isEmpty();
+    }
     HICR_THROW_FATAL("This channel '%s' contains no interfaces\n", _channelName.c_str());
   }
 
@@ -152,7 +156,28 @@ class Channel final
   {
     // Returning whether the consumer buffer of the channel is empty
     if (_consumerInterface != nullptr) return _consumerInterface->isFull();
-    if (_producerInterface != nullptr) return _producerInterface->isFull();
+    if (_producerInterface != nullptr)
+    {
+      _producerInterface->updateDepth();
+      return _producerInterface->isFull();
+    }
+    HICR_THROW_FATAL("This channel '%s' contains no interfaces\n", _channelName.c_str());
+  }
+
+  /**
+   * Retrieves the number of tokens present in the buffer
+   * 
+   * @return the number of tokens in the buffer
+   */
+  __INLINE__ size_t getDepth()
+  {
+    // Returning whether the consumer buffer of the channel is empty
+    if (_consumerInterface != nullptr) return _consumerInterface->getDepth();
+    if (_producerInterface != nullptr)
+    {
+      _producerInterface->updateDepth();
+      return _producerInterface->getDepth();
+    }
     HICR_THROW_FATAL("This channel '%s' contains no interfaces\n", _channelName.c_str());
   }
 
