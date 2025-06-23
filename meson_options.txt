@@ -1,5 +1,5 @@
 option('engine', type : 'combo',
-       choices : [ 'mpi', 'lpf', 'local' ], 
+       choices : [ 'mpi', 'lpf', 'local', 'cloudr-mpi' ], 
        description : 'Specifies which distributed execution engine to use',
        value: 'local'
        )

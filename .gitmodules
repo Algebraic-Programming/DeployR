@@ -9,3 +9,6 @@
 [submodule "extern/HiCR"]
 	path = extern/HiCR
 	url = https://github.com/Algebraic-Programming/HiCR.git
+[submodule "extern/cloudr"]
+	path = extern/cloudr
+	url = git@ssh.gitlab.huaweirc.ch:zrc-von-neumann-lab/runtime-system-innovations/cloudr.git

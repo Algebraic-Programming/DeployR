@@ -10,20 +10,38 @@ project('DeployR', [ 'cpp', 'c'],
 
 deployrDependencies = [ ]
 
-####### Getting HiCR dependency
-
-# Selecting default HiCR Backends
-HiCRBackends = [ 'hwloc', 'pthreads' ]
-
-# Getting selected distributed engine
+##### Getting selected distributed engine
 
 engine = get_option('engine')
 
 # If, selected, adding the dependency for the distributed engine
-if engine != 'local'
-  HiCRBackends += engine
+
+if engine == 'local'
+  DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LOCAL'
 endif
 
+if engine == 'mpi'
+  additionalHiCRBackends = [ 'mpi' ]
+  DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_MPI'
+  mpirunExecutable = find_program('mpirun', '/usr/bin/mpirun', '/usr/local/bin/mpirun', required : true)
+endif
+
+if engine == 'lpf'
+  additionalHiCRBackends = [ 'mpi', 'lpf' ]
+  DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LPF'
+endif
+
+if engine == 'cloudr-mpi'
+  additionalHiCRBackends = [ 'mpi' ]
+  CloudRProject = subproject('cloudr', required: true, default_options: [  ])
+  CloudRBuildDep = CloudRProject.get_variable('CloudRBuildDep')
+  deployrDependencies += CloudRBuildDep
+  DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR_MPI'
+endif
+
+##### Adding HiCR Dependency
+
+HiCRBackends = [ 'hwloc', 'pthreads' ] + additionalHiCRBackends
 HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=RPCEngine,channel' ])
 HiCRBuildDep = HiCRProject.get_variable('hicrBuildDep')
 deployrDependencies += HiCRBuildDep
@@ -33,21 +51,6 @@ deployrDependencies += HiCRBuildDep
 HopcroftKarpProject = subproject('hopcroft_karp', required: true)
 HopcroftKarpBuildDep = HopcroftKarpProject.get_variable('HopcroftKarpBuildDep')
 deployrDependencies += HopcroftKarpBuildDep
-
-##### Handling distributed engine options
-
-if engine == 'mpi'
-DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_MPI'
-mpirunExecutable = find_program('mpirun', '/usr/bin/mpirun', '/usr/local/bin/mpirun', required : true)
-endif
-
-if engine == 'lpf'
-DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LPF'
-endif
-
-if engine == 'local'
-DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LOCAL'
-endif
 
 ####### Creating DeployR dependency
 
