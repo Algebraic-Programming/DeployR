@@ -18,31 +18,56 @@ engine = get_option('engine')
 
 if engine == 'local'
   DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LOCAL'
+
+  additionalHiCRBackends = [ ]
+  additionalHiCRFrontends = [ ]
 endif
 
 if engine == 'mpi'
-  additionalHiCRBackends = [ 'mpi' ]
   DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_MPI'
   mpirunExecutable = find_program('mpirun', '/usr/bin/mpirun', '/usr/local/bin/mpirun', required : true)
+
+  additionalHiCRBackends = [ 'mpi' ]
+  additionalHiCRFrontends = [ ]
 endif
 
 if engine == 'lpf'
-  additionalHiCRBackends = [ 'mpi', 'lpf' ]
   DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LPF'
+
+  additionalHiCRBackends = [ 'mpi', 'lpf' ]
+  additionalHiCRFrontends = [ ]
 endif
 
 if engine == 'cloudr-mpi'
-  additionalHiCRBackends = [ 'mpi' ]
   CloudRProject = subproject('cloudr', required: true, default_options: [  ])
   CloudRBuildDep = CloudRProject.get_variable('CloudRBuildDep')
   deployrDependencies += CloudRBuildDep
   DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR_MPI'
+  
+  CloudRHiCRBackends = CloudRProject.get_variable('CloudRHiCRBackends')
+  CloudRHiCRFrontends = CloudRProject.get_variable('CloudRHiCRFrontends')
+
+  additionalHiCRBackends = [ ] + CloudRHiCRBackends
+  additionalHiCRFrontends = [ ] + CloudRHiCRFrontends
 endif
 
 ##### Adding HiCR Dependency
 
-HiCRBackends = [ 'hwloc', 'pthreads' ] + additionalHiCRBackends
-HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=RPCEngine,channel' ])
+# Getting full list of backends and frontends
+HiCRBackends = [] + additionalHiCRBackends
+
+if 'hwloc' not in additionalHiCRBackends
+  HiCRBackends += 'hwloc'
+endif
+
+if 'pthreads' not in additionalHiCRBackends
+  HiCRBackends += 'pthreads'
+endif
+
+HiCRFrontends = [ ] + additionalHiCRFrontends
+
+# Getting HiCR dependency
+HiCRProject = subproject('HiCR', required: true, default_options: [ 'backends=' + ','.join(HiCRBackends), 'frontends=' + ','.join(HiCRFrontends) ])
 HiCRBuildDep = HiCRProject.get_variable('hicrBuildDep')
 deployrDependencies += HiCRBuildDep
 

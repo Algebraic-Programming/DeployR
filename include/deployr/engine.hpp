@@ -55,11 +55,10 @@ class Engine
    *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
    *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
    */
-  __INLINE__ void initialize(int *pargc, char ***pargv)
-  {
-    // initialize engine-specific managers
-    initializeManagers(pargc, pargv);
+  virtual void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc) = 0;
 
+  __INLINE__ void deploy()
+  {
     // Reserving memory for hwloc
     hwloc_topology_init(&_hwlocTopology);
 
@@ -95,8 +94,8 @@ class Engine
     _rpcEngine = std::make_unique<HiCR::frontend::RPCEngine>(*_communicationManager, *_instanceManager, *_memoryManager, *_computeManager, RPCMemorySpace, RPCComputeResource);
 
     // Initializing RPC engine
-    _rpcEngine->initialize();
-  };
+    _rpcEngine->initialize();    
+  }
 
   /**
    * Function to fatally abort execution in all instances. 
@@ -353,7 +352,7 @@ class Engine
       _communicationManager->fence(channelTag);
     }
 
-    return std::make_shared<Channel>(channelName, _memoryManager.get(), bufferMemorySpace, consumerInterface, producerInterface);
+    return std::make_shared<Channel>(channelName, _memoryManager, bufferMemorySpace, consumerInterface, producerInterface);
   }
 
   /**
@@ -415,22 +414,14 @@ class Engine
 
   protected:
 
-  /**
-    * Initializes the HiCR managers for topology, instance, memory, and communication
-    * 
-    *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
-    *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
-    */
-  virtual void initializeManagers(int *pargc, char ***pargv) = 0;
-
   /// Storage for the distributed engine's communication manager
-  std::unique_ptr<HiCR::CommunicationManager> _communicationManager;
+  HiCR::CommunicationManager* _communicationManager;
 
-  /// Storage for the distributed engine's instance manager
-  std::unique_ptr<HiCR::InstanceManager> _instanceManager;
+  /// The distributed engine's instance manager
+  HiCR::InstanceManager* _instanceManager;
 
-  /// Storage for the distributed engine's memory manager
-  std::unique_ptr<HiCR::MemoryManager> _memoryManager;
+  /// The distributed engine's memory manager
+  HiCR::MemoryManager* _memoryManager;
 
   /// Storage for topology managers
   std::vector<std::unique_ptr<HiCR::TopologyManager>> _topologyManagers;

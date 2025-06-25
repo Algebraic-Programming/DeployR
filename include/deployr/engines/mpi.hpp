@@ -21,11 +21,15 @@ class MPI final : public deployr::Engine
 
   ~MPI() = default;
 
-  __INLINE__ void initializeManagers(int *pargc, char ***pargv) override
+  __INLINE__ void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc) override
   {
-    _instanceManager      = HiCR::backend::mpi::InstanceManager::createDefault(pargc, pargv);
-    _communicationManager = std::make_unique<HiCR::backend::mpi::CommunicationManager>(MPI_COMM_WORLD);
-    _memoryManager        = std::make_unique<HiCR::backend::mpi::MemoryManager>();
+    _mpiInstanceManager   = std::move(HiCR::backend::mpi::InstanceManager::createDefault(pargc, pargv));
+    _instanceManager      = _mpiInstanceManager.get();
+    _communicationManager = new HiCR::backend::mpi::CommunicationManager(MPI_COMM_WORLD);
+    _memoryManager        = new HiCR::backend::mpi::MemoryManager;
+
+    // Now running deployment function
+    deploymentFc();
   };
 
   __INLINE__ void finalize() override { _instanceManager->finalize(); }
@@ -33,6 +37,8 @@ class MPI final : public deployr::Engine
   __INLINE__ void abort() override { MPI_Abort(MPI_COMM_WORLD, 1); }
 
   private:
+
+  std::unique_ptr<HiCR::InstanceManager> _mpiInstanceManager;
 };
 
 } // namespace deployr::engine

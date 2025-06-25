@@ -19,6 +19,10 @@
   #include "engines/local.hpp"
 #endif
 
+#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR_MPI
+  #include "engines/cloudrMPI.hpp"
+#endif
+
 #define __DEPLOYR_GET_TOPOLOGY_RPC_NAME "[DeployR] Get Topology"
 #define __DEPLOYR_GET_DEPLOYMENT_RPC_NAME "[DeployR] Get Deployment"
 
@@ -45,6 +49,10 @@ class DeployR final
 
 #ifdef _DEPLOYR_DISTRIBUTED_ENGINE_LOCAL
     _engine = std::make_unique<engine::Local>();
+#endif
+
+#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR_MPI
+    _engine = std::make_unique<engine::CloudR>();
 #endif
 
     // Registering topology exchanging RPC
@@ -76,46 +84,51 @@ class DeployR final
    * 
    * @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
    * @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+   * @return True, if this is the root rank; False, otherwise
    */
-  __INLINE__ void initialize(int *pargc, char ***pargv)
+  __INLINE__ bool initialize(int *pargc, char ***pargv)
   {
-    // Initializing distributed execution engine
-    _engine->initialize(pargc, pargv);
-
-    // Getting local host index among all HiCR instances
-    _localHostIndex = _engine->getLocalInstanceIndex();
-
-    // Committing rpcs to the engine
-    for (const auto &rpc : _registeredFunctions) _engine->registerRPC(rpc.first, rpc.second);
-
-    // Getting local topology
-    _localTopology = _engine->detectLocalTopology();
-
-    // Gathering global topology into the root instance
-    _globalTopology = gatherGlobalTopology();
-
-    // If this is not the root instance, wait for incoming RPCs
-    if (_engine->isRootInstance() == false)
+    // Function for deployment after initializing a new instance
+    auto deploymentFc = [this]()
     {
-      // Getting deployment information from the root instance
-      _deployment = broadcastDeployment();
-      //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
+      // Running deployment function of the engine
+      _engine->deploy();
 
-      // Identifying local instance
-      _localInstance = identifyLocalInstance();
+      // Getting local host index among all HiCR instances
+      _localHostIndex = _engine->getLocalInstanceIndex();
 
-      // Creating communication channels
-      createChannels();
+      // Committing rpcs to the engine
+      for (const auto &rpc : _registeredFunctions) _engine->registerRPC(rpc.first, rpc.second);
 
-      // Running initial function assigned to this host
-      runInitialFunction();
+      // Getting local topology
+      _localTopology = _engine->detectLocalTopology();
 
-      // Only a single user-defined RPC shall be executed by a non-root instance
-      _engine->finalize();
+      // Gathering global topology into the root instance
+      _globalTopology = gatherGlobalTopology();
 
-      // Exiting regularly.
-      exit(0);
-    }
+      // If this is not the root instance, wait for incoming RPCs
+      if (_engine->isRootInstance() == false)
+      {
+        // Getting deployment information from the root instance
+        _deployment = broadcastDeployment();
+        //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
+
+        // Identifying local instance
+        _localInstance = identifyLocalInstance();
+
+        // Creating communication channels
+        createChannels();
+
+        // Running initial function assigned to this host
+        runInitialFunction();
+      }
+    };
+
+    // Initializing distributed execution engine
+    _engine->initialize(pargc, pargv, deploymentFc);
+    
+    // Return whether this is the root instance or not
+    return _engine->isRootInstance();
   }
 
   /**
