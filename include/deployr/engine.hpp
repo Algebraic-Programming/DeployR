@@ -42,6 +42,13 @@ class Engine
   virtual ~Engine() = default;
 
   /**
+   * Add topology manager to the engine
+   * 
+   * @param topologyManager topology manager to add to Engine
+  */
+  __INLINE__ void addTopologyManager(HiCR::TopologyManager *topologyManager) { _topologyManagers.push_back(topologyManager); }
+
+  /**
    * Gets a collection, ordered by index, of all the detected / created HiCR instances
    * 
    * @return An array with the detected / created HiCR instances
@@ -63,30 +70,13 @@ class Engine
     hwloc_topology_init(&_hwlocTopology);
 
     // Initializing HWLoc-based host (CPU) topology manager
-    auto hwlocTopologyManager = std::make_unique<HiCR::backend::hwloc::TopologyManager>(&_hwlocTopology);
-
-    // Adding topology manager to the list
-    _topologyManagers.push_back(std::move(hwlocTopologyManager));
-
-#ifdef _HICR_USE_ASCEND_BACKEND_
-
-    // Initialize (Ascend's) ACL runtime
-    aclError err = aclInit(NULL);
-    if (err != ACL_SUCCESS) HICR_THROW_RUNTIME("Failed to initialize Ascend Computing Language. Error %d", err);
-
-    // Initializing ascend topology manager
-    auto ascendTopologyManager = std::make_unique<HiCR::backend::ascend::TopologyManager>();
-
-    // Adding topology manager to the list
-    _topologyManagers.push_back(std::move(ascendTopologyManager));
-
-#endif // _HICR_USE_ASCEND_BACKEND_
+    auto hwlocTopologyManager = HiCR::backend::hwloc::TopologyManager(&_hwlocTopology);
 
     // Initializing RPC-related managers
     _computeManager = std::make_unique<HiCR::backend::pthreads::ComputeManager>();
 
     // Finding the first memory space and compute resource to create our RPC engine
-    _firstDevice            = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
+    _firstDevice            = hwlocTopologyManager.queryTopology().getDevices().begin().operator*();
     auto RPCMemorySpace     = _firstDevice->getMemorySpaceList().begin().operator*();
     auto RPCComputeResource = _firstDevice->getComputeResourceList().begin().operator*();
 
@@ -94,7 +84,7 @@ class Engine
     _rpcEngine = std::make_unique<HiCR::frontend::RPCEngine>(*_communicationManager, *_instanceManager, *_memoryManager, *_computeManager, RPCMemorySpace, RPCComputeResource);
 
     // Initializing RPC engine
-    _rpcEngine->initialize();    
+    _rpcEngine->initialize();
   }
 
   /**
@@ -415,16 +405,16 @@ class Engine
   protected:
 
   /// Storage for the distributed engine's communication manager
-  HiCR::CommunicationManager* _communicationManager;
+  HiCR::CommunicationManager *_communicationManager;
 
   /// The distributed engine's instance manager
-  HiCR::InstanceManager* _instanceManager;
+  HiCR::InstanceManager *_instanceManager;
 
   /// The distributed engine's memory manager
-  HiCR::MemoryManager* _memoryManager;
+  HiCR::MemoryManager *_memoryManager;
 
   /// Storage for topology managers
-  std::vector<std::unique_ptr<HiCR::TopologyManager>> _topologyManagers;
+  std::vector<HiCR::TopologyManager *> _topologyManagers;
 
   /// Storage for compute manager
   std::unique_ptr<HiCR::backend::pthreads::ComputeManager> _computeManager;

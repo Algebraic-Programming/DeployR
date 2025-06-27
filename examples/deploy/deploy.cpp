@@ -6,14 +6,24 @@
 
 int main(int argc, char *argv[])
 {
+  // Initialize Hwloc topology object
+  hwloc_topology_t hwlocTopology;
+  hwloc_topology_init(&hwlocTopology);
+
+  // Initializing HWLoc-based host (CPU) topology manager
+  auto topologyManager = HiCR::backend::hwloc::TopologyManager(&hwlocTopology);
+
   // Creating DeployR instance
   deployr::DeployR deployr;
+
+  // Add topology manager
+  deployr.addTopologyManager(&topologyManager);
 
   // Creating Functions
   deployr.registerFunction("CoordinatorFc", [&]() { coordinatorFc(deployr); });
   deployr.registerFunction("WorkerFc", [&]() { workerFc(deployr); });
 
-  // Initializing DeployR. 
+  // Initializing DeployR.
   bool isRoot = deployr.initialize(&argc, &argv);
 
   // Only one instance (root) configures and runs the deployment

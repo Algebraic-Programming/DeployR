@@ -77,6 +77,13 @@ class DeployR final
   ~DeployR() = default;
 
   /**
+   * Add topology manager to the engine
+   * 
+   * @param topologyManager topology manager to add to Engine
+  */
+  __INLINE__ void addTopologyManager(HiCR::TopologyManager *topologyManager) { _engine->addTopologyManager(topologyManager);}
+  
+  /**
    * The initialization function for DeployR.
    * 
    * It initializes the HiCR management engine, detects the local topology, broadcasts the global topology to the root instance.
