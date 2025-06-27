@@ -81,8 +81,8 @@ class DeployR final
    * 
    * @param topologyManager topology manager to add to Engine
   */
-  __INLINE__ void addTopologyManager(HiCR::TopologyManager *topologyManager) { _engine->addTopologyManager(topologyManager);}
-  
+  __INLINE__ void addTopologyManager(HiCR::TopologyManager *topologyManager) { _engine->addTopologyManager(topologyManager); }
+
   /**
    * The initialization function for DeployR.
    * 
@@ -96,8 +96,7 @@ class DeployR final
   __INLINE__ bool initialize(int *pargc, char ***pargv)
   {
     // Function for deployment after initializing a new instance
-    auto deploymentFc = [this]()
-    {
+    auto deploymentFc = [this]() {
       // Running deployment function of the engine
       _engine->deploy();
 
@@ -133,7 +132,7 @@ class DeployR final
 
     // Initializing distributed execution engine
     _engine->initialize(pargc, pargv, deploymentFc);
-    
+
     // Return whether this is the root instance or not
     return _engine->isRootInstance();
   }
