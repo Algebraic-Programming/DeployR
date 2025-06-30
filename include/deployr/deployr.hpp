@@ -162,19 +162,8 @@ class DeployR final
       _engine->abort();
     }
 
-    // If 1 < K < N, this is the hybrid scenario, not handled as it is complex and unlikely to be required.
-    if (HiCRInstanceCount > 1 && HiCRInstanceCount < instancesRequested)
-    {
-      fprintf(stderr, "[DeployR] Irregular number of initial instances (%lu) provided. Must be either 1 or %lu for this request.\n", HiCRInstanceCount, instancesRequested);
-      _engine->abort();
-    }
-
-    // If K == 1, this is the cloud scenario. N-1 instances will be created.
-    if (HiCRInstanceCount == 1 && HiCRInstanceCount < instancesRequested)
-    {
-      fprintf(stderr, "[DeployR] TBD: create more instances according with requested instance hardware requirements\n");
-      _engine->abort();
-    }
+    // If K < N, this is the cloud scenario. The rest of the instances will be created.
+    if (HiCRInstanceCount < instancesRequested) deployRemainingInstances(request);
 
     // Printing topology
     // printf("[DeployR] Detected Global Topology\n");
@@ -510,6 +499,16 @@ class DeployR final
 
     // Running initial function
     initialFc();
+  }
+
+  __INLINE__ void deployRemainingInstances(Request &request)
+  {
+    printf("Deploying initial instances\n");
+
+    // Step 1: Looking for requested instances that are satisfied by the currently running instances
+
+    // Step 2: Asking deployr for new instances which satisfy each of the required instance's architecture
+    while(1);
   }
 
   /// A pointer to the HiCR Manager Engine used to run low-level operations
