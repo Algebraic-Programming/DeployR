@@ -21,7 +21,7 @@ class Local final : public deployr::Engine
 
   ~Local() = default;
 
-  __INLINE__ void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc) override
+  __INLINE__ void initializeImpl(int *pargc, char ***pargv, std::function<void()> deploymentFc) override
   {
     // Reserving memory for hwloc
     hwloc_topology_init(&_topology);

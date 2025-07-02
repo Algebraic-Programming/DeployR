@@ -155,6 +155,13 @@ class DeployR final
     // With N: number of requested instances
     // With K: number of initial instances
 
+    // If K > 1 && K < N, this is an irregular start, which is not handled. Abort
+    if (HiCRInstanceCount > 1 && HiCRInstanceCount < instancesRequested)
+    {
+      fprintf(stderr, "[DeployR] More initial instances (%lu) provided than required (%lu) were provided.\n", HiCRInstanceCount, instancesRequested);
+      _engine->abort();
+    }
+
     // If K > N, more initial instances than requested provided. Abort execution.
     if (HiCRInstanceCount > instancesRequested)
     {
@@ -162,17 +169,8 @@ class DeployR final
       _engine->abort();
     }
 
-    // If K < N, this is the cloud scenario. The rest of the instances will be created.
-    if (HiCRInstanceCount < instancesRequested) deployRemainingInstances(request);
-
-    // Printing topology
-    // printf("[DeployR] Detected Global Topology\n");
-    // for (size_t i = 0; i < _globalTopology.size(); i++)
-    // {
-    //   printf("Instance: %lu\n", i);
-    //   printf("%s\n", _globalTopology[i].dump(2).c_str());
-    //   printf("--------\n");
-    // }
+    // If K == 1, this is the cloud scenario. The rest of the instances will be created.
+    if (HiCRInstanceCount == 1) deployRemainingInstances(request);
 
     // Building deployment object
     _deployment = Deployment(request);
@@ -505,9 +503,55 @@ class DeployR final
   {
     printf("Deploying initial instances\n");
 
-    // Step 1: Looking for requested instances that are satisfied by the currently running instances
+    // Getting local topology
+    auto localTopology = _engine->detectLocalTopology();
 
-    // Step 2: Asking deployr for new instances which satisfy each of the required instance's architecture
+    // Making a copy of the requested instances. One of them will be satisfied (and removed) by the currently running instance
+    auto requestedInstances = request.getInstances();
+
+    // Getting requested host types
+    const auto& requestedHostTypes = request.getHostTypes();
+
+    // Looking for requested instances that are satisfied by the currently running instances
+    for (auto requestedInstanceItr = requestedInstances.begin();  requestedInstanceItr != requestedInstances.end(); requestedInstanceItr++)
+    {
+      const auto& requestedInstance = requestedInstanceItr->second;
+      const auto& requestedInstanceName = requestedInstance.getName();
+      const auto& requestedInstanceHostType = requestedInstance.getHostType();
+      const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
+      
+      // Checking for compatibility
+      deployr::Host localHost(0, localTopology);
+      const bool isCompatible = localHost.checkCompatibility(requestedHostType);
+      // printf("Instance %s with type %s is %scompatible\n", requestedInstanceName.c_str(), requestedHostType.getName().c_str(), isCompatible ? "" : "not ");
+      
+      // If it is compatible, then:  
+      if (isCompatible)
+      {
+        // Remove it from the list of new instances to request
+        requestedInstances.erase(requestedInstanceItr);
+
+        // and break the loop
+        break;
+      }
+    }
+    printf("After %lu \n",requestedInstances.size() );
+
+    // Requesting the creation of the rest of the instances
+    for (const auto& requestedInstanceItr : requestedInstances)
+    {
+      const auto& requestedInstance = requestedInstanceItr.second;
+      const auto& requestedInstanceName = requestedInstance.getName();
+      const auto& requestedInstanceHostType = requestedInstance.getHostType();
+      const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
+
+      // const auto requestedTopology = HiCR::Topology(requestedHostType.getTopology());
+      // const auto requestedTemplate = HiCR::InstanceTemplate(requestedHostType.getTopology());
+
+      // auto instanceManager = _engine->createInstance()
+    }
+
+    // Asking deployr for new instances which satisfy each of the required instance's architecture
     while(1);
   }
 

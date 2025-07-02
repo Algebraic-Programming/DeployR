@@ -21,7 +21,7 @@ class MPI final : public deployr::Engine
 
   ~MPI() = default;
 
-  __INLINE__ void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc) override
+  __INLINE__ void initializeImpl(int *pargc, char ***pargv, std::function<void()> deploymentFc) override
   {
     _mpiInstanceManager   = std::move(HiCR::backend::mpi::InstanceManager::createDefault(pargc, pargv));
     _instanceManager      = _mpiInstanceManager.get();

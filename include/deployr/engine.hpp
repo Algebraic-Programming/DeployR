@@ -55,9 +55,7 @@ class Engine
    *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
    *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
    */
-  virtual void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc) = 0;
-
-  __INLINE__ void deploy()
+  __INLINE__ void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc)
   {
     // Reserving memory for hwloc
     hwloc_topology_init(&_hwlocTopology);
@@ -93,6 +91,12 @@ class Engine
     // Instantiating RPC engine
     _rpcEngine = std::make_unique<HiCR::frontend::RPCEngine>(*_communicationManager, *_instanceManager, *_memoryManager, *_computeManager, RPCMemorySpace, RPCComputeResource);
 
+    // Calling derived class-specific initialization routine
+    initializeImpl(pargc, pargv, deploymentFc);
+  };
+
+  __INLINE__ void deploy()
+  {
     // Initializing RPC engine
     _rpcEngine->initialize();    
   }
@@ -412,7 +416,22 @@ class Engine
    */
   __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _rpcEngine.get(); }
 
+
+  __INLINE__ std::shared_ptr<HiCR::Instance> createInstance(const HiCR::InstanceTemplate t)
+  {
+      return _instanceManager->createInstance(t);
+  }
+
   protected:
+
+  /**
+   *  Initializes the internal HiCR managers required for DeployR and those chosen by the user. 
+   *  It instantiates and initializes the RPC engine for sending functions across instances.
+   * 
+   *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+   *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
+   */
+  virtual void initializeImpl(int *pargc, char ***pargv, std::function<void()> deploymentFc) = 0;
 
   /// Storage for the distributed engine's communication manager
   HiCR::CommunicationManager* _communicationManager;

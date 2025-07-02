@@ -19,7 +19,7 @@ class CloudR final : public deployr::Engine
 
   ~CloudR() = default;
 
-  __INLINE__ void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc) override
+  __INLINE__ void initializeImpl(int *pargc, char ***pargv, std::function<void()> deploymentFc) override
   {
     _deploymentFc = deploymentFc;
     _cloudrInstanceManager = new HiCR::backend::cloudr::InstanceManager([this](HiCR::backend::cloudr::InstanceManager* cloudr, int, char**) { _deploymentFc(); return 0; });
