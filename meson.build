@@ -38,11 +38,11 @@ if engine == 'lpf'
   additionalHiCRFrontends = [ ]
 endif
 
-if engine == 'cloudr-mpi'
+if engine == 'cloudr'
   CloudRProject = subproject('cloudr', required: true, default_options: [  ])
   CloudRBuildDep = CloudRProject.get_variable('CloudRBuildDep')
   deployrDependencies += CloudRBuildDep
-  DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR_MPI'
+  DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR'
   
   CloudRHiCRBackends = CloudRProject.get_variable('CloudRHiCRBackends')
   CloudRHiCRFrontends = CloudRProject.get_variable('CloudRHiCRFrontends')

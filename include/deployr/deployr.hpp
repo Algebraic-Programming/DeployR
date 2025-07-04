@@ -19,8 +19,8 @@
   #include "engines/local.hpp"
 #endif
 
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR_MPI
-  #include "engines/cloudrMPI.hpp"
+#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR
+  #include "engines/cloudr.hpp"
 #endif
 
 #define __DEPLOYR_GET_TOPOLOGY_RPC_NAME "[DeployR] Get Topology"
@@ -51,7 +51,7 @@ class DeployR final
     _engine = std::make_unique<engine::Local>();
 #endif
 
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR_MPI
+#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR
     _engine = std::make_unique<engine::CloudR>();
 #endif
 
@@ -255,8 +255,6 @@ class DeployR final
   // Function for engine deployment
   __INLINE__ void initialDeployment()
   {
-    if (_engine->isRootInstance()) printf("I am root instance\n");
-    
     // Running deployment function of the engine
     _engine->deploy();
 
