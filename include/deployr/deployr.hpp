@@ -88,8 +88,6 @@ class DeployR final
    */
   __INLINE__ bool initialize(int *pargc, char ***pargv)
   {
-    printf("deployr.hpp Initializing A \n");
-
     // Initializing distributed execution engine
     _engine->initialize(pargc, pargv, [this]() { this->initialDeployment(); });
     
@@ -483,15 +481,11 @@ class DeployR final
     // Getting host list
     const auto &hostList = _deployment.getHosts();
 
-    // Getting local instance id
-    const auto localInstanceId = _engine->getCurrentInstance().getId();
-
     // Finding the pairing corresponding to this host
     std::string localInstanceName;
     for (const auto &p : pairings)
     {
       const auto& instanceId = hostList[p.second].getInstanceId();
-      printf("Comparing instanceId %lu with %lu -- %s\n", instanceId, localInstanceId, p.first.c_str());
       if (instanceId == _engine->getCurrentInstance().getId())
       {
         localInstanceName = p.first;
@@ -527,8 +521,6 @@ class DeployR final
 
   __INLINE__ void deployRemainingInstances(Request &request)
   {
-    printf("Deploying initial instances\n");
-
     // Getting local topology
     auto localTopology = _engine->detectLocalTopology();
 
@@ -542,14 +534,14 @@ class DeployR final
     for (auto requestedInstanceItr = requestedInstances.begin();  requestedInstanceItr != requestedInstances.end(); requestedInstanceItr++)
     {
       const auto& requestedInstance = requestedInstanceItr->second;
-      const auto& requestedInstanceName = requestedInstance.getName();
+      // const auto& requestedInstanceName = requestedInstance.getName();
       const auto& requestedInstanceHostType = requestedInstance.getHostType();
       const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
       
       // Checking for compatibility
       deployr::Host localHost(0, localTopology);
       const bool isCompatible = localHost.checkCompatibility(requestedHostType);
-      printf("Instance %s with type %s is %scompatible\n", requestedInstanceName.c_str(), requestedHostType.getName().c_str(), isCompatible ? "" : "not ");
+      // printf("Instance %s with type %s is %scompatible\n", requestedInstanceName.c_str(), requestedHostType.getName().c_str(), isCompatible ? "" : "not ");
       
       // If it is compatible, then:  
       if (isCompatible)
@@ -566,7 +558,7 @@ class DeployR final
     for (const auto& requestedInstanceItr : requestedInstances)
     {
       const auto& requestedInstance = requestedInstanceItr.second;
-      const auto& requestedInstanceName = requestedInstance.getName();
+      // const auto& requestedInstanceName = requestedInstance.getName();
       const auto& requestedInstanceHostType = requestedInstance.getHostType();
       const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
 
@@ -575,8 +567,6 @@ class DeployR final
 
       // Creating new instance
       auto newInstance = _engine->createInstance(requestedTemplate);
-
-      printf("Created new instance, id: %lu\n", newInstance->getId());
     }
 
     // printf("Active instances: %lu\n", _engine->getHiCRInstances().size() );
@@ -590,9 +580,6 @@ class DeployR final
 
   /// Local instance object
   Request::Instance _localInstance;
-
-  /// Index of this host on the deployment
-  size_t _localHostIndex;
 
   /// Storage for the local system topology
   nlohmann::json _localTopology;
