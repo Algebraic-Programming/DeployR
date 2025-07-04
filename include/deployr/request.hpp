@@ -112,65 +112,6 @@ class Request final
   {
     public:
 
-    /**
-     * Represents a device type to be contained in this host type, and how many of these devices should be present. It can indicate a certain GPU/NPU device, as well as CPU NUMA domains.
-     */
-    class Device
-    {
-      public:
-
-      Device()  = delete;
-      ~Device() = default;
-
-      /**
-       * Deserializing constructor for the device request
-       * 
-       * @param[in] deviceJs A JSON-encoded device request information
-       */
-      Device(const nlohmann::json &deviceJs)
-      {
-        // Parsing device type
-        _type = hicr::json::getString(deviceJs, "Type");
-
-        // Min host capabilities
-        _minMemoryGB         = hicr::json::getNumber<size_t>(deviceJs, "Minimum Memory (GB)");
-        _minComputeResources = hicr::json::getNumber<size_t>(deviceJs, "Minimum Compute Resources");
-      }
-
-      /**
-       * Gets the device type
-       * 
-       * @return The device type
-       */
-      [[nodiscard]] __INLINE__ const std::string &getType() const { return _type; }
-
-      /**
-       * Gets the minimum memory (in GB) required from this device
-       * 
-       * @return the minimum memory (in GB) required from this device
-       */
-      [[nodiscard]] __INLINE__ const size_t getMinMemoryGB() const { return _minMemoryGB; }
-
-      /**
-       * Gets the minimum processing units required from this device
-       * 
-       * @return the minimum processing units required from this device
-       */
-      [[nodiscard]] __INLINE__ const size_t getMinComputeResources() const { return _minComputeResources; }
-
-      private:
-
-      /// The type of the device, to use to check whether the host contains such a device
-      std::string _type;
-
-      /// Minimum memory (GB) required in this device
-      size_t _minMemoryGB;
-
-      /// Minimum compute resources required in this device
-      size_t _minComputeResources;
-
-    }; // class Device
-
     HostType()  = default;
     ~HostType() = default;
 
@@ -185,8 +126,7 @@ class Request final
       _name = hicr::json::getString(hostTypeJs, "Name");
 
       // Parsing request devices
-      auto topologyJs = hicr::json::getArray<nlohmann::json>(hostTypeJs, "Topology");
-      for (const auto &deviceJs : topologyJs) _topology.push_back(Device(deviceJs));
+      _topology = hicr::json::getObject(hostTypeJs, "Topology");
     }
 
     /**
@@ -194,7 +134,7 @@ class Request final
      * 
      * @return the topology required by this host type
      */
-    [[nodiscard]] __INLINE__ const std::vector<Device> &getTopology() const { return _topology; }
+    [[nodiscard]] __INLINE__ const nlohmann::json &getTopology() const { return _topology; }
 
     /**
      * Gets the host type name. 
@@ -209,7 +149,7 @@ class Request final
     std::string _name;
 
     /// Set of topology required by this host type
-    std::vector<Device> _topology;
+    nlohmann::json _topology;
 
   }; // class HostType
 

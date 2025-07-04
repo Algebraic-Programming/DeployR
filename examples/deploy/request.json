@@ -5,21 +5,39 @@
     [
         {
             "Name": "Entry",
-            "Topology":
-            [
-            ]
+            "Topology": {}
         },
 
         {
             "Name": "Compute",
             "Topology":
-            [
-                {
-                    "Type": "NUMA Domain",
-                    "Minimum Memory (GB)": 8,
-                    "Minimum Compute Resources": 2
-                }
-            ]
+            {
+                "Devices":
+                [
+                    {
+                        "Type": "NUMA Domain",
+                        "Compute Resources":
+                        [
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" }
+                        ],
+                        "Memory Spaces":
+                        [
+                            {
+                                "Type": "RAM",
+                                "Size": 274877906944,
+                                "Usage": 0
+                            }
+                        ]
+                    }
+                ]
+            }
         }
     ],
 

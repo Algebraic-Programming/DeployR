@@ -88,44 +88,10 @@ class DeployR final
    */
   __INLINE__ bool initialize(int *pargc, char ***pargv)
   {
-    // Function for deployment after initializing a new instance
-    auto deploymentFc = [this]()
-    {
-      // Running deployment function of the engine
-      _engine->deploy();
-
-      // Getting local host index among all HiCR instances
-      _localHostIndex = _engine->getLocalInstanceIndex();
-
-      // Committing rpcs to the engine
-      for (const auto &rpc : _registeredFunctions) _engine->registerRPC(rpc.first, rpc.second);
-
-      // Getting local topology
-      _localTopology = _engine->detectLocalTopology();
-
-      // Gathering global topology into the root instance
-      _globalTopology = gatherGlobalTopology();
-
-      // If this is not the root instance, wait for incoming RPCs
-      if (_engine->isRootInstance() == false)
-      {
-        // Getting deployment information from the root instance
-        _deployment = broadcastDeployment();
-        //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
-
-        // Identifying local instance
-        _localInstance = identifyLocalInstance();
-
-        // Creating communication channels
-        createChannels();
-
-        // Running initial function assigned to this host
-        runInitialFunction();
-      }
-    };
+    printf("deployr.hpp Initializing A \n");
 
     // Initializing distributed execution engine
-    _engine->initialize(pargc, pargv, deploymentFc);
+    _engine->initialize(pargc, pargv, [this]() { this->initialDeployment(); });
     
     // Return whether this is the root instance or not
     return _engine->isRootInstance();
@@ -172,11 +138,24 @@ class DeployR final
     // If K == 1, this is the cloud scenario. The rest of the instances will be created.
     if (HiCRInstanceCount == 1) deployRemainingInstances(request);
 
+    // Updating number of instances available
+    HiCRInstanceCount = _engine->getHiCRInstances().size();
+
     // Building deployment object
     _deployment = Deployment(request);
 
+    // Exchanging information with other instances by running the initial deployment function
+    initialDeployment();
+
     // Adding hosts to the deployment object
-    for (size_t i = 0; i < _globalTopology.size(); i++) _deployment.addHost(Host(i, _globalTopology[i]));
+    for (size_t i = 0; i < _globalTopology.size(); i++)
+    {
+      // Getting instance id
+      const auto instanceId = _engine->getHiCRInstances()[i]->getId();
+      
+      // Adding corresponding host
+      _deployment.addHost(Host(instanceId, _globalTopology[i]));
+    } 
 
     // Proceed with request to instance matching
     if (_deployment.performMatching() == false)
@@ -275,6 +254,41 @@ class DeployR final
 
   private:
 
+  // Function for engine deployment
+  __INLINE__ void initialDeployment()
+  {
+    if (_engine->isRootInstance()) printf("I am root instance\n");
+    
+    // Running deployment function of the engine
+    _engine->deploy();
+
+    // Committing rpcs to the engine
+    for (const auto &rpc : _registeredFunctions) _engine->registerRPC(rpc.first, rpc.second);
+
+    // Getting local topology
+    _localTopology = _engine->detectLocalTopology();
+
+    // Gathering global topology into the root instance
+    _globalTopology = gatherGlobalTopology();
+
+    // If this is not the root instance, wait for incoming RPCs
+    if (_engine->isRootInstance() == false)
+    {
+      // Getting deployment information from the root instance
+      _deployment = broadcastDeployment();
+      //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
+
+      // Identifying local instance
+      _localInstance = identifyLocalInstance();
+
+      // Creating communication channels
+      createChannels();
+
+      // Running initial function assigned to this host
+      runInitialFunction();
+    }
+  }
+
   /**
    * [Internal] Gets an array of HiCR instances, each one representing a Host
    * 
@@ -329,8 +343,8 @@ class DeployR final
         // If not, it's another instance: send RPC and deserialize return value
         else
         {
-          // Requessting RPC from the remote instance
-          _engine->launchRPC(instance->getId(), __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
+          // Requesting RPC from the remote instance
+          _engine->launchRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
 
           // Getting return value as a memory slot
           auto returnValue = _engine->getRPCReturnValue(*instance);
@@ -434,12 +448,14 @@ class DeployR final
       std::vector<HiCR::Instance::instanceId_t> producerInstances;
       for (const auto &producer : producers)
       {
-        const auto instanceId = _deployment.getPairings().at(producer);
+        const auto hostId = _deployment.getPairings().at(producer);
+        const auto instanceId = _deployment.getHosts()[hostId].getInstanceId();
         producerInstances.push_back(instanceId);
       }
 
       // Getting consumer instance id
-      const auto &consumerInstance = _deployment.getPairings().at(consumer);
+      const auto hostId = _deployment.getPairings().at(consumer);
+      const auto consumerInstance = _deployment.getHosts()[hostId].getInstanceId();
 
       // Getting channel unique id (required as a tag by HiCR channels)
       const auto channelId = i;
@@ -464,14 +480,24 @@ class DeployR final
     // Getting pairings
     const auto &pairings = _deployment.getPairings();
 
+    // Getting host list
+    const auto &hostList = _deployment.getHosts();
+
+    // Getting local instance id
+    const auto localInstanceId = _engine->getCurrentInstance().getId();
+
     // Finding the pairing corresponding to this host
     std::string localInstanceName;
     for (const auto &p : pairings)
-      if (p.second == _localHostIndex)
+    {
+      const auto& instanceId = hostList[p.second].getInstanceId();
+      printf("Comparing instanceId %lu with %lu -- %s\n", instanceId, localInstanceId, p.first.c_str());
+      if (instanceId == _engine->getCurrentInstance().getId())
       {
         localInstanceName = p.first;
         break;
       }
+    }
 
     // Getting requested instance's information
     return _deployment.getRequest().getInstances().at(localInstanceName);
@@ -523,7 +549,7 @@ class DeployR final
       // Checking for compatibility
       deployr::Host localHost(0, localTopology);
       const bool isCompatible = localHost.checkCompatibility(requestedHostType);
-      // printf("Instance %s with type %s is %scompatible\n", requestedInstanceName.c_str(), requestedHostType.getName().c_str(), isCompatible ? "" : "not ");
+      printf("Instance %s with type %s is %scompatible\n", requestedInstanceName.c_str(), requestedHostType.getName().c_str(), isCompatible ? "" : "not ");
       
       // If it is compatible, then:  
       if (isCompatible)
@@ -535,7 +561,6 @@ class DeployR final
         break;
       }
     }
-    printf("After %lu \n",requestedInstances.size() );
 
     // Requesting the creation of the rest of the instances
     for (const auto& requestedInstanceItr : requestedInstances)
@@ -545,14 +570,16 @@ class DeployR final
       const auto& requestedInstanceHostType = requestedInstance.getHostType();
       const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
 
-      // const auto requestedTopology = HiCR::Topology(requestedHostType.getTopology());
-      // const auto requestedTemplate = HiCR::InstanceTemplate(requestedHostType.getTopology());
+      const auto requestedTopology = HiCR::Topology(requestedHostType.getTopology());
+      const auto requestedTemplate = HiCR::InstanceTemplate(requestedTopology);
 
-      // auto instanceManager = _engine->createInstance()
+      // Creating new instance
+      auto newInstance = _engine->createInstance(requestedTemplate);
+
+      printf("Created new instance, id: %lu\n", newInstance->getId());
     }
 
-    // Asking deployr for new instances which satisfy each of the required instance's architecture
-    while(1);
+    // printf("Active instances: %lu\n", _engine->getHiCRInstances().size() );
   }
 
   /// A pointer to the HiCR Manager Engine used to run low-level operations

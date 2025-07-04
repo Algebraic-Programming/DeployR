@@ -29,16 +29,33 @@ class MPI final : public deployr::Engine
     _memoryManager        = new HiCR::backend::mpi::MemoryManager;
 
     // Now running deployment function
-    deploymentFc();
+    if (_instanceManager->getCurrentInstance()->isRootInstance() == false) deploymentFc();
   };
 
   __INLINE__ void finalize() override { _instanceManager->finalize(); }
 
   __INLINE__ void abort() override { MPI_Abort(MPI_COMM_WORLD, 1); }
 
+  __INLINE__ void deploy() override
+  {
+    // Finding the first memory space and compute resource to create our RPC engine
+    auto RPCMemorySpace     = _firstDevice->getMemorySpaceList().begin().operator*();
+    auto RPCComputeResource = _firstDevice->getComputeResourceList().begin().operator*();
+
+    // Instantiating RPC engine
+    _rpcEnginePtr = std::make_unique<HiCR::frontend::RPCEngine>(*_communicationManager, *_instanceManager, *_memoryManager, *_computeManager, RPCMemorySpace, RPCComputeResource);
+    _rpcEngine = _rpcEnginePtr.get();
+
+    // Initializing RPC engine
+    _rpcEngine->initialize();    
+  }
+
   private:
 
   std::unique_ptr<HiCR::InstanceManager> _mpiInstanceManager;
+  std::unique_ptr<HiCR::frontend::RPCEngine> _rpcEnginePtr;
+
+
 };
 
 } // namespace deployr::engine

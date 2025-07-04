@@ -57,6 +57,9 @@ class Engine
    */
   __INLINE__ void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc)
   {
+    // Initializing RPC-related managers
+    _computeManager = std::make_unique<HiCR::backend::pthreads::ComputeManager>();
+
     // Reserving memory for hwloc
     hwloc_topology_init(&_hwlocTopology);
 
@@ -80,26 +83,12 @@ class Engine
 
 #endif // _HICR_USE_ASCEND_BACKEND_
 
-    // Initializing RPC-related managers
-    _computeManager = std::make_unique<HiCR::backend::pthreads::ComputeManager>();
-
-    // Finding the first memory space and compute resource to create our RPC engine
+    // Remembering first device provided
     _firstDevice            = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
-    auto RPCMemorySpace     = _firstDevice->getMemorySpaceList().begin().operator*();
-    auto RPCComputeResource = _firstDevice->getComputeResourceList().begin().operator*();
-
-    // Instantiating RPC engine
-    _rpcEngine = std::make_unique<HiCR::frontend::RPCEngine>(*_communicationManager, *_instanceManager, *_memoryManager, *_computeManager, RPCMemorySpace, RPCComputeResource);
 
     // Calling derived class-specific initialization routine
     initializeImpl(pargc, pargv, deploymentFc);
   };
-
-  __INLINE__ void deploy()
-  {
-    // Initializing RPC engine
-    _rpcEngine->initialize();    
-  }
 
   /**
    * Function to fatally abort execution in all instances. 
@@ -116,20 +105,11 @@ class Engine
   virtual void finalize() = 0;
 
   /**
-    * Gets the index within the HiCR instance list corresponding to this local instance
-    * 
-    * @return The index corresponding to this instance
-    */
-  [[nodiscard]] __INLINE__ size_t getLocalInstanceIndex() const
-  {
-    const auto localHostInstanceId = _instanceManager->getCurrentInstance()->getId();
-
-    const auto &instances = _instanceManager->getInstances();
-    for (size_t i = 0; i < instances.size(); i++)
-      if (instances[i]->getId() == localHostInstanceId) return i;
-
-    return 0;
-  }
+   * Performs the initial deployment
+   * 
+   * The implementation of this function is left to the underlying engine
+   */
+  virtual void deploy() = 0;
 
   /**
     * Indicates whether the local instance is the HiCR root instance
@@ -151,6 +131,17 @@ class Engine
     return *(instances[0]);
   }
 
+    /**
+    * Gets the HiCR instance object corresponding to the root instance
+    * 
+    * @return A HiCR instance object corresponding to the root instance
+    */
+  __INLINE__ HiCR::Instance &getCurrentInstance() const
+  {
+    return *_instanceManager->getCurrentInstance();
+  }
+
+
   /**
     * Gets the index within the HiCR instance list corresponding to the root instance
     * 
@@ -161,6 +152,19 @@ class Engine
     const auto &instances = _instanceManager->getInstances();
     for (size_t i = 0; i < instances.size(); i++)
       if (instances[i]->isRootInstance()) return i;
+    return 0;
+  }
+
+  /**
+    * Gets the index within the HiCR instance list corresponding to the provided instance
+    * 
+    * @return The index within the HiCR instance list corresponding to the provided instance
+    */
+  [[nodiscard]] __INLINE__ size_t getRootInstanceIndex(const HiCR::Instance::instanceId_t instanceId) const
+  {
+    const auto &instances = _instanceManager->getInstances();
+    for (size_t i = 0; i < instances.size(); i++)
+      if (instances[i]->getId() == instanceId) return i;
     return 0;
   }
 
@@ -187,6 +191,17 @@ class Engine
   __INLINE__ void listenRPCs() { _rpcEngine->listen(); }
 
   /**
+  * Function to request the execution of an RPC in a remote instance
+  * 
+  * @param[in] instance HiCR instance to execute this RPC
+  * @param[in] RPCName Name of the function to run. It must have been registered in the target instance beforehand to work
+  */
+  __INLINE__ void launchRPC(HiCR::Instance& instance, const std::string &RPCName)
+  {
+    _rpcEngine->requestRPC(instance, RPCName);
+  }
+
+  /**
     * Function to request the execution of an RPC in a remote instance
     * 
     * @param[in] instanceIndex Index within the HiCR instance list corresponding to the instance that must execute this RPC
@@ -196,8 +211,9 @@ class Engine
   {
     auto &instances = _instanceManager->getInstances();
     auto &instance  = instances[instanceIndex];
-    _rpcEngine->requestRPC(*instance, RPCName);
+    this->launchRPC(*instance, RPCName);
   }
+
 
 #define SIZES_BUFFER_KEY 0
 #define CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY 3
@@ -212,35 +228,35 @@ class Engine
     * 
     * @param[in] channelTag The unique identifier for the channel. This tag should be unique for each channel
     * @param[in] channelName The name of the channel. This will be the identifier used to retrieve the channel
-    * @param[in] producerIdxs Indexes of the instances within the HiCR instance list to serve as producers
-    * @param[in] consumerIdx Index of the instance within the HiCR instance list to serve as consumer
+    * @param[in] producerIds Ids of the instances within the HiCR instance list to serve as producers
+    * @param[in] consumerId Ids of the instance within the HiCR instance list to serve as consumer
     * @param[in] bufferCapacity The number of tokens that can be simultaneously held in the channel's buffer
     * @param[in] bufferSize The size (bytes) of the buffer.abort
     * @return A shared pointer of the newly created channel
     */
   __INLINE__ std::shared_ptr<Channel> createChannel(const size_t              channelTag,
                                                     const std::string         channelName,
-                                                    const std::vector<size_t> producerIdxs,
-                                                    const size_t              consumerIdx,
+                                                    const std::vector<size_t> producerIds,
+                                                    const size_t              consumerId,
                                                     const size_t              bufferCapacity,
                                                     const size_t              bufferSize)
   {
-    // printf("Creating channel %lu '%s', producer count: %lu (first: %lu), consumer %lu, bufferCapacity: %lu, bufferSize: %lu\n", channelTag, name.c_str(), producerIdxs.size(), producerIdxs.size() > 0 ? producerIdxs[0] : 0, consumerIdx, bufferCapacity, bufferSize);
+    // printf("Creating channel %lu '%s', producer count: %lu (first: %lu), consumer %lu, bufferCapacity: %lu, bufferSize: %lu\n", channelTag, name.c_str(), producerIds.size(), producerIds.size() > 0 ? producerIds[0] : 0, consumerId, bufferCapacity, bufferSize);
 
     // Interfaces for the channel
     std::shared_ptr<HiCR::channel::variableSize::MPSC::locking::Consumer> consumerInterface = nullptr;
     std::shared_ptr<HiCR::channel::variableSize::MPSC::locking::Producer> producerInterface = nullptr;
 
     // Getting my local instance index
-    auto localInstanceIndex = getLocalInstanceIndex();
+    auto localInstanceId = _instanceManager->getCurrentInstance()->getId();
 
     // Checking if I am consumer
-    bool isConsumer = consumerIdx == getLocalInstanceIndex();
+    bool isConsumer = consumerId == localInstanceId;
 
     // Checking if I am producer
     bool isProducer = false;
-    for (const auto producerIdx : producerIdxs)
-      if (producerIdx == localInstanceIndex)
+    for (const auto producerId : producerIds)
+      if (producerId == localInstanceId)
       {
         isProducer = true;
         break;
@@ -414,12 +430,19 @@ class Engine
    * 
    * @return A pointer to the RPC engine
    */
-  __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _rpcEngine.get(); }
+  __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _rpcEngine; }
 
 
   __INLINE__ std::shared_ptr<HiCR::Instance> createInstance(const HiCR::InstanceTemplate t)
   {
-      return _instanceManager->createInstance(t);
+      auto newInstance = _instanceManager->createInstance(t);
+      if (newInstance.get() == nullptr)
+      {
+        fprintf(stderr, "Failed to create new instance with requested topology: %s\n", t.getTopology().serialize().dump(2).c_str());
+        abort();
+      }
+
+      return newInstance;
   }
 
   protected:
@@ -449,7 +472,7 @@ class Engine
   std::unique_ptr<HiCR::backend::pthreads::ComputeManager> _computeManager;
 
   /// RPC engine
-  std::unique_ptr<HiCR::frontend::RPCEngine> _rpcEngine;
+  HiCR::frontend::RPCEngine* _rpcEngine;
 
   /// First device to use as buffer source
   std::shared_ptr<HiCR::Device> _firstDevice;
