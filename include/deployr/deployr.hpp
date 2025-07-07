@@ -250,6 +250,21 @@ class DeployR final
    */
   __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _engine->getRPCEngine(); }
 
+  /**
+   * Retrieves the list of HiCR instances currently running
+   * 
+   * @return A list of HiCR instances currently running
+   */
+  __INLINE__ HiCR::InstanceManager::instanceList_t getInstances() { return _engine->getHiCRInstances(); }
+
+    /**
+   * Retrieves currently running instance
+   * 
+   * @return The current HiCR instance
+   */
+  __INLINE__ HiCR::Instance& getCurrentInstance() { return _engine->getCurrentInstance(); }
+
+
   private:
 
   // Function for engine deployment

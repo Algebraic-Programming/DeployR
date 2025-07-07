@@ -56,8 +56,8 @@ class CloudR final : public deployr::Engine
   };
 
   __INLINE__ void finalize() override {
-     _instanceManager->finalize();
-     delete _instanceManager;
+     _cloudrInstanceManager->finalize();
+     delete _cloudrInstanceManager;
    }
 
   __INLINE__ void abort() override { _instanceManager->abort(-1); }
