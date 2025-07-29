@@ -264,6 +264,15 @@ class DeployR final
    */
   __INLINE__ HiCR::Instance& getCurrentInstance() { return _engine->getCurrentInstance(); }
 
+  /**
+   * Requests the root instance
+   * 
+   * @return A reference to the root instance
+   */
+  __INLINE__ HiCR::Instance& getRootInstance() const
+  {
+    return _engine->getRootInstance();
+  }
 
   private:
 
