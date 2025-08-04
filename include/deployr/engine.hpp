@@ -4,6 +4,7 @@
 #include <hicr/core/instanceManager.hpp>
 #include <hicr/core/memoryManager.hpp>
 #include <hicr/core/computeManager.hpp>
+#include <hicr/core/exceptions.hpp>
 #include <hicr/frontends/RPCEngine/RPCEngine.hpp>
 #include <hicr/backends/pthreads/computeManager.hpp>
 #include <hicr/frontends/channel/variableSize/mpsc/locking/consumer.hpp>
@@ -435,7 +436,16 @@ class Engine
 
   __INLINE__ std::shared_ptr<HiCR::Instance> createInstance(const HiCR::InstanceTemplate t)
   {
-      auto newInstance = _instanceManager->createInstance(t);
+      std::shared_ptr<HiCR::Instance> newInstance;
+      try
+      {
+        newInstance = _instanceManager->createInstance(t);
+      }
+      catch(const std::exception& e)
+      {
+        HICR_THROW_FATAL("[DeployR] Failed to create new instance. Reason: \n  + '%s'", e.what());
+      }
+      
       if (newInstance.get() == nullptr)
       {
         fprintf(stderr, "Failed to create new instance with requested topology: %s\n", t.getTopology().serialize().dump(2).c_str());
