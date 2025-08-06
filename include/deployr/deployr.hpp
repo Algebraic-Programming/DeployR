@@ -11,18 +11,6 @@
 #include "request.hpp"
 #include "deployment.hpp"
 
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_MPI
-  #include "engines/mpi.hpp"
-#endif
-
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_LOCAL
-  #include "engines/local.hpp"
-#endif
-
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR
-  #include "engines/cloudr.hpp"
-#endif
-
 #define __DEPLOYR_GET_TOPOLOGY_RPC_NAME "[DeployR] Get Topology"
 #define __DEPLOYR_GET_DEPLOYMENT_RPC_NAME "[DeployR] Get Deployment"
 
@@ -40,20 +28,10 @@ class DeployR final
   /**
    * Default constructor for DeployR. It creates the HiCR management engine and registers the basic functions needed during deployment.
    */
-  DeployR()
+  DeployR(HiCR::InstanceManager* instanceManager, HiCR::CommunicationManager* communicationManager, HiCR::MemoryManager* memoryManager, HiCR::frontend::RPCEngine* rpcEngine)
   {
-// Instantiating distributed execution engine
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_MPI
-    _engine = std::make_unique<engine::MPI>();
-#endif
-
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_LOCAL
-    _engine = std::make_unique<engine::Local>();
-#endif
-
-#ifdef _DEPLOYR_DISTRIBUTED_ENGINE_CLOUDR
-    _engine = std::make_unique<engine::CloudR>();
-#endif
+    // Creating engine object
+    _engine = std::make_unique<Engine>(instanceManager, communicationManager, memoryManager, rpcEngine);
 
     // Registering topology exchanging RPC
     registerFunction(__DEPLOYR_GET_TOPOLOGY_RPC_NAME, [this]() {
@@ -82,17 +60,15 @@ class DeployR final
    * It initializes the HiCR management engine, detects the local topology, broadcasts the global topology to the root instance.
    * All instances need to be call this function before the root instance can request a deployment. Only the root instance will continue thereafter. 
    * 
-   * @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
-   * @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
    * @return True, if this is the root rank; False, otherwise
    */
-  __INLINE__ bool initialize(int *pargc, char ***pargv)
+  __INLINE__ void initialize()
   {
     // Initializing distributed execution engine
-    _engine->initialize(pargc, pargv, [this]() { this->initialDeployment(); });
-    
-    // Return whether this is the root instance or not
-    return _engine->isRootInstance();
+    _engine->initialize();
+
+    // Running initial deployment operations
+    initialDeployment();
   }
 
   /**
@@ -105,6 +81,13 @@ class DeployR final
    */
   __INLINE__ void deploy(Request &request)
   {
+    // Checking this function is called from the root instance
+    if (this->getCurrentInstance().isRootInstance() == false) 
+    {
+      fprintf(stderr, "[DeployR] The deploy function can only be called from the root instance\n");
+      _engine->abort();
+    }
+
     // Counting the exact number of instances requested.
     size_t instancesRequested = request.getInstances().size();
 
@@ -198,6 +181,9 @@ class DeployR final
 
     // Adding new RPC to the set
     _registeredFunctions.insert({functionName, fc});
+
+    // Registering the function on the engine
+    _engine->registerRPC(functionName, fc);
   }
 
   /**
@@ -279,12 +265,6 @@ class DeployR final
   // Function for engine deployment
   __INLINE__ void initialDeployment()
   {
-    // Running deployment function of the engine
-    _engine->deploy();
-
-    // Committing rpcs to the engine
-    for (const auto &rpc : _registeredFunctions) _engine->registerRPC(rpc.first, rpc.second);
-
     // Getting local topology
     _localTopology = _engine->detectLocalTopology();
 
@@ -296,7 +276,7 @@ class DeployR final
     {
       // Getting deployment information from the root instance
       _deployment = broadcastDeployment();
-      //printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
+      // printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
 
       // Identifying local instance
       _localInstance = identifyLocalInstance();

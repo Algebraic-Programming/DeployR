@@ -35,12 +35,18 @@ namespace deployr
  * 
  * Instantiates device-specific HiCR backends and resolves the detection of the system topology and channel creation.
  */
-class Engine
+class Engine final
 {
   public:
 
-  Engine()          = default;
-  virtual ~Engine() = default;
+  Engine(HiCR::InstanceManager* instanceManager, HiCR::CommunicationManager* communicationManager, HiCR::MemoryManager* memoryManager, HiCR::frontend::RPCEngine* rpcEngine)
+  : _instanceManager(instanceManager),
+    _communicationManager(communicationManager),
+    _memoryManager(memoryManager),
+    _rpcEngine(rpcEngine)
+  {};
+
+  ~Engine() = default;
 
   /**
    * Gets a collection, ordered by index, of all the detected / created HiCR instances
@@ -52,11 +58,8 @@ class Engine
   /**
    *  Initializes the internal HiCR managers required for DeployR and those chosen by the user. 
    *  It instantiates and initializes the RPC engine for sending functions across instances.
-   * 
-   *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
-   *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
    */
-  __INLINE__ void initialize(int *pargc, char ***pargv, std::function<void()> deploymentFc)
+  __INLINE__ void initialize()
   {
     // Initializing RPC-related managers
     _computeManager = std::make_unique<HiCR::backend::pthreads::ComputeManager>();
@@ -86,9 +89,6 @@ class Engine
 
     // Remembering first device provided
     _firstDevice            = _topologyManagers.begin().operator*()->queryTopology().getDevices().begin().operator*();
-
-    // Calling derived class-specific initialization routine
-    initializeImpl(pargc, pargv, deploymentFc);
   };
 
   /**
@@ -96,21 +96,20 @@ class Engine
    * It can be called by any one instance.
    * It delegates the implementation to the configured backends
    */
-  virtual void abort() = 0;
+  void abort(const int errorCode = -1)
+  {
+    _instanceManager->abort(errorCode);
+  }
 
   /**
    * Function to normally finalize execution.
    * It must be called by all instances.
    * It delegates the implementation to the configured backends
    */
-  virtual void finalize() = 0;
-
-  /**
-   * Performs the initial deployment
-   * 
-   * The implementation of this function is left to the underlying engine
-   */
-  virtual void deploy() = 0;
+  void finalize()
+  {
+    _instanceManager->finalize();
+  }
 
   /**
     * Indicates whether the local instance is the HiCR root instance
@@ -457,32 +456,23 @@ class Engine
 
   protected:
 
-  /**
-   *  Initializes the internal HiCR managers required for DeployR and those chosen by the user. 
-   *  It instantiates and initializes the RPC engine for sending functions across instances.
-   * 
-   *  @param[in] pargc A pointer to the argc value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
-   *  @param[in] pargv A pointer to the argv value given in main. Its value is initialized at this point. Using it before will result in undefined behavior.
-   */
-  virtual void initializeImpl(int *pargc, char ***pargv, std::function<void()> deploymentFc) = 0;
+  /// The distributed engine's instance manager
+  HiCR::InstanceManager* const _instanceManager;
 
   /// Storage for the distributed engine's communication manager
-  HiCR::CommunicationManager* _communicationManager;
-
-  /// The distributed engine's instance manager
-  HiCR::InstanceManager* _instanceManager;
+  HiCR::CommunicationManager* const _communicationManager;
 
   /// The distributed engine's memory manager
-  HiCR::MemoryManager* _memoryManager;
+  HiCR::MemoryManager* const _memoryManager;
+
+  /// The RPC engine to use for all remote function requests
+  HiCR::frontend::RPCEngine* const _rpcEngine;
 
   /// Storage for topology managers
   std::vector<std::unique_ptr<HiCR::TopologyManager>> _topologyManagers;
 
   /// Storage for compute manager
   std::unique_ptr<HiCR::backend::pthreads::ComputeManager> _computeManager;
-
-  /// RPC engine
-  HiCR::frontend::RPCEngine* _rpcEngine;
 
   /// First device to use as buffer source
   std::shared_ptr<HiCR::Device> _firstDevice;
