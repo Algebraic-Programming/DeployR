@@ -108,7 +108,7 @@ class Engine final
    */
   void finalize()
   {
-    _instanceManager->finalize();
+    // Nothing to do here so far
   }
 
   /**
@@ -265,8 +265,17 @@ class Engine final
     // Finding the first memory space to create our channels
     auto bufferMemorySpace = _firstDevice->getMemorySpaceList().begin().operator*();
 
+    // Collection of memory slots to exchange and their keys
+    std::vector<HiCR::CommunicationManager::globalKeyMemorySlotPair_t> memorySlotsToExchange;
+
+    // Temporary storage for coordination buffer pointers
+    std::shared_ptr<HiCR::LocalMemorySlot> localCoordinationBufferForSizes = nullptr;
+    std::shared_ptr<HiCR::LocalMemorySlot> localCoordinationBufferForPayloads = nullptr;
+
+    ////// Pre-Exchange: Create local slots and register them for exchange
+
     // If I am consumer, create the consumer interface for the channel
-    if (isConsumer == true && isProducer == false)
+    if (isConsumer == true)
     {
       // Getting required buffer sizes
       auto sizesBufferSize = HiCR::channel::variableSize::Base::getTokenBufferSize(sizeof(size_t), bufferCapacity);
@@ -281,26 +290,39 @@ class Engine final
       auto coordinationBufferSize = HiCR::channel::variableSize::Base::getCoordinationBufferSize();
 
       // Allocating coordination buffer for internal message size metadata
-      auto coordinationBufferForSizes = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+      localCoordinationBufferForSizes = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
       // Allocating coordination buffer for internal payload metadata
-      auto coordinationBufferForPayloads = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+      localCoordinationBufferForPayloads = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
       // Initializing coordination buffer (sets to zero the counters)
-      HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForSizes);
+      HiCR::channel::variableSize::Base::initializeCoordinationBuffer(localCoordinationBufferForSizes);
+      HiCR::channel::variableSize::Base::initializeCoordinationBuffer(localCoordinationBufferForPayloads);
 
-      HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForPayloads);
+      // Adding memory slots to exchange
+      memorySlotsToExchange.push_back({SIZES_BUFFER_KEY, sizesBufferSlot});
+      memorySlotsToExchange.push_back({CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY, localCoordinationBufferForSizes});
+      memorySlotsToExchange.push_back({CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY, localCoordinationBufferForPayloads});
+      memorySlotsToExchange.push_back({CONSUMER_PAYLOAD_KEY, payloadBufferSlot});
+    }
 
-      // Exchanging local memory slots to become global for them to be used by the remote end
-      _communicationManager->exchangeGlobalMemorySlots(channelTag,
-                                                       {{SIZES_BUFFER_KEY, sizesBufferSlot},
-                                                        {CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY, coordinationBufferForSizes},
-                                                        {CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY, coordinationBufferForPayloads},
-                                                        {CONSUMER_PAYLOAD_KEY, payloadBufferSlot}});
+    // If I am producer, exchange relevant buffers
+    if (isProducer == true)
+    {
+      // nothing to exchange for now, but this might change in the future if we support other types of channels
+    }
 
-      // Synchronizing so that all actors have finished registering their global memory slots
-      _communicationManager->fence(channelTag);
+    ////// Exchange: local memory slots to become global for them to be used by the remote end
+    _communicationManager->exchangeGlobalMemorySlots(channelTag, memorySlotsToExchange);
 
+    // Synchronizing so that all actors have finished registering their global memory slots
+    _communicationManager->fence(channelTag);
+
+    ///// Post exchange: create consumer/producer intefaces
+
+    // If I am a consumer, create consumer interface now  
+    if (isConsumer == true)
+    {
       // Obtaining the globally exchanged memory slots
       auto globalSizesBufferSlot                 = _communicationManager->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
       auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
@@ -311,8 +333,8 @@ class Engine final
       consumerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Consumer>(*_communicationManager,
                                                                                                  globalPayloadBuffer,   /* payloadBuffer */
                                                                                                  globalSizesBufferSlot, /* tokenSizeBuffer */
-                                                                                                 coordinationBufferForSizes,
-                                                                                                 coordinationBufferForPayloads,
+                                                                                                 localCoordinationBufferForSizes,
+                                                                                                 localCoordinationBufferForPayloads,
                                                                                                  consumerCoordinationBufferForSizes,
                                                                                                  consumerCoordinationBufferForPayloads,
                                                                                                  bufferSize,
@@ -320,7 +342,7 @@ class Engine final
     }
 
     // If I am producer, create the producer interface for the channel
-    if (isProducer == true && isConsumer == false)
+    if (isProducer == true)
     {
       // Getting required buffer size
       auto coordinationBufferSize = HiCR::channel::variableSize::Base::getCoordinationBufferSize();
@@ -335,12 +357,6 @@ class Engine final
       // Initializing coordination buffers for message sizes and payloads (sets to zero the counters)
       HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForSizes);
       HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForPayloads);
-
-      // Exchanging local memory slots to become global for them to be used by the remote end
-      _communicationManager->exchangeGlobalMemorySlots(channelTag, {});
-
-      // Synchronizing so that all actors have finished registering their global memory slots
-      _communicationManager->fence(channelTag);
 
       // Obtaining the globally exchanged memory slots
       auto sizesBuffer                           = _communicationManager->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
@@ -360,16 +376,6 @@ class Engine final
                                                                                                  bufferSize,
                                                                                                  sizeof(char),
                                                                                                  bufferCapacity);
-    }
-
-    // If I am not involved in this channel (neither consumer or producer, simply participate in the exchange)
-    if (isConsumer == false && isProducer == false)
-    {
-      // Exchanging local memory slots to become global for them to be used by the remote end
-      _communicationManager->exchangeGlobalMemorySlots(channelTag, {});
-
-      // Synchronizing so that all actors have finished registering their global memory slots
-      _communicationManager->fence(channelTag);
     }
 
     return std::make_shared<Channel>(channelName, _memoryManager, bufferMemorySpace, consumerInterface, producerInterface);
