@@ -53,7 +53,7 @@ void workerFc(deployr::DeployR &deployr)
   printf("[WorkerFc] %s received message from coordinator: '%s'\n", instanceName.c_str(), message.c_str());
 }
 
-void driver(deployr::DeployR &deployr, const char* deployrConfigFilePath)
+void deploy(deployr::DeployR &deployr, const char* deployrConfigFilePath)
 {
   bool isRoot = deployr.getCurrentInstance().isRootInstance();
   
