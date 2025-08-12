@@ -39,10 +39,7 @@ class Engine final
 {
   public:
 
-  Engine(HiCR::InstanceManager* instanceManager, HiCR::CommunicationManager* communicationManager, HiCR::MemoryManager* memoryManager, HiCR::frontend::RPCEngine* rpcEngine)
-  : _instanceManager(instanceManager),
-    _communicationManager(communicationManager),
-    _memoryManager(memoryManager),
+  Engine(HiCR::frontend::RPCEngine* rpcEngine) :
     _rpcEngine(rpcEngine)
   {};
 
@@ -53,7 +50,7 @@ class Engine final
    * 
    * @return An array with the detected / created HiCR instances
    */
-  [[nodiscard]] __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _instanceManager->getInstances(); }
+  [[nodiscard]] __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _rpcEngine->getInstanceManager()->getInstances(); }
 
   /**
    *  Initializes the internal HiCR managers required for DeployR and those chosen by the user. 
@@ -61,9 +58,6 @@ class Engine final
    */
   __INLINE__ void initialize()
   {
-    // Initializing RPC-related managers
-    _computeManager = std::make_unique<HiCR::backend::pthreads::ComputeManager>();
-
     // Reserving memory for hwloc
     hwloc_topology_init(&_hwlocTopology);
 
@@ -98,7 +92,7 @@ class Engine final
    */
   void abort(const int errorCode = -1)
   {
-    _instanceManager->abort(errorCode);
+    _rpcEngine->getInstanceManager()->abort(errorCode);
   }
 
   /**
@@ -116,7 +110,7 @@ class Engine final
     * 
     * @return true, if this is the root instance; false, otherwise.
     */
-  [[nodiscard]] __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
+  [[nodiscard]] __INLINE__ bool isRootInstance() const { return _rpcEngine->getInstanceManager()->getCurrentInstance()->getId() == _rpcEngine->getInstanceManager()->getRootInstanceId(); }
 
   /**
     * Gets the HiCR instance object corresponding to the root instance
@@ -125,7 +119,7 @@ class Engine final
     */
   __INLINE__ HiCR::Instance &getRootInstance() const
   {
-    auto &instances = _instanceManager->getInstances();
+    auto &instances = _rpcEngine->getInstanceManager()->getInstances();
     for (size_t i = 0; i < instances.size(); i++)
       if (instances[i]->isRootInstance()) return *(instances[i]);
     return *(instances[0]);
@@ -138,7 +132,7 @@ class Engine final
     */
   __INLINE__ HiCR::Instance &getCurrentInstance() const
   {
-    return *_instanceManager->getCurrentInstance();
+    return *_rpcEngine->getInstanceManager()->getCurrentInstance();
   }
 
 
@@ -149,7 +143,7 @@ class Engine final
     */
   [[nodiscard]] __INLINE__ size_t getRootInstanceIndex() const
   {
-    const auto &instances = _instanceManager->getInstances();
+    const auto &instances = _rpcEngine->getInstanceManager()->getInstances();
     for (size_t i = 0; i < instances.size(); i++)
       if (instances[i]->isRootInstance()) return i;
     return 0;
@@ -162,7 +156,7 @@ class Engine final
     */
   [[nodiscard]] __INLINE__ size_t getRootInstanceIndex(const HiCR::Instance::instanceId_t instanceId) const
   {
-    const auto &instances = _instanceManager->getInstances();
+    const auto &instances = _rpcEngine->getInstanceManager()->getInstances();
     for (size_t i = 0; i < instances.size(); i++)
       if (instances[i]->getId() == instanceId) return i;
     return 0;
@@ -209,7 +203,7 @@ class Engine final
     */
   __INLINE__ void launchRPC(const size_t instanceIndex, const std::string &RPCName)
   {
-    auto &instances = _instanceManager->getInstances();
+    auto &instances = _rpcEngine->getInstanceManager()->getInstances();
     auto &instance  = instances[instanceIndex];
     this->launchRPC(*instance, RPCName);
   }
@@ -248,7 +242,7 @@ class Engine final
     std::shared_ptr<HiCR::channel::variableSize::MPSC::locking::Producer> producerInterface = nullptr;
 
     // Getting my local instance index
-    auto localInstanceId = _instanceManager->getCurrentInstance()->getId();
+    auto localInstanceId = _rpcEngine->getInstanceManager()->getCurrentInstance()->getId();
 
     // Checking if I am consumer
     bool isConsumer = consumerId == localInstanceId;
@@ -281,19 +275,19 @@ class Engine final
       auto sizesBufferSize = HiCR::channel::variableSize::Base::getTokenBufferSize(sizeof(size_t), bufferCapacity);
 
       // Allocating sizes buffer as a local memory slot
-      auto sizesBufferSlot = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, sizesBufferSize);
+      auto sizesBufferSlot = _rpcEngine->getMemoryManager()->allocateLocalMemorySlot(bufferMemorySpace, sizesBufferSize);
 
       // Allocating payload buffer as a local memory slot
-      auto payloadBufferSlot = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, bufferSize);
+      auto payloadBufferSlot = _rpcEngine->getMemoryManager()->allocateLocalMemorySlot(bufferMemorySpace, bufferSize);
 
       // Getting required buffer size
       auto coordinationBufferSize = HiCR::channel::variableSize::Base::getCoordinationBufferSize();
 
       // Allocating coordination buffer for internal message size metadata
-      localCoordinationBufferForSizes = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+      localCoordinationBufferForSizes = _rpcEngine->getMemoryManager()->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
       // Allocating coordination buffer for internal payload metadata
-      localCoordinationBufferForPayloads = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+      localCoordinationBufferForPayloads = _rpcEngine->getMemoryManager()->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
       // Initializing coordination buffer (sets to zero the counters)
       HiCR::channel::variableSize::Base::initializeCoordinationBuffer(localCoordinationBufferForSizes);
@@ -313,10 +307,10 @@ class Engine final
     }
 
     ////// Exchange: local memory slots to become global for them to be used by the remote end
-    _communicationManager->exchangeGlobalMemorySlots(channelTag, memorySlotsToExchange);
+    _rpcEngine->getCommunicationManager()->exchangeGlobalMemorySlots(channelTag, memorySlotsToExchange);
 
     // Synchronizing so that all actors have finished registering their global memory slots
-    _communicationManager->fence(channelTag);
+    _rpcEngine->getCommunicationManager()->fence(channelTag);
 
     ///// Post exchange: create consumer/producer intefaces
 
@@ -324,13 +318,13 @@ class Engine final
     if (isConsumer == true)
     {
       // Obtaining the globally exchanged memory slots
-      auto globalSizesBufferSlot                 = _communicationManager->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
-      auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
-      auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
-      auto globalPayloadBuffer                   = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_PAYLOAD_KEY);
+      auto globalSizesBufferSlot                 = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
+      auto consumerCoordinationBufferForSizes    = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
+      auto consumerCoordinationBufferForPayloads = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
+      auto globalPayloadBuffer                   = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, CONSUMER_PAYLOAD_KEY);
 
       // Creating producer and consumer channels
-      consumerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Consumer>(*_communicationManager,
+      consumerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Consumer>(*_rpcEngine->getCommunicationManager(),
                                                                                                  globalPayloadBuffer,   /* payloadBuffer */
                                                                                                  globalSizesBufferSlot, /* tokenSizeBuffer */
                                                                                                  localCoordinationBufferForSizes,
@@ -348,24 +342,24 @@ class Engine final
       auto coordinationBufferSize = HiCR::channel::variableSize::Base::getCoordinationBufferSize();
 
       // Allocating sizes buffer as a local memory slot
-      auto coordinationBufferForSizes = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+      auto coordinationBufferForSizes = _rpcEngine->getMemoryManager()->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
-      auto coordinationBufferForPayloads = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
+      auto coordinationBufferForPayloads = _rpcEngine->getMemoryManager()->allocateLocalMemorySlot(bufferMemorySpace, coordinationBufferSize);
 
-      auto sizeInfoBuffer = _memoryManager->allocateLocalMemorySlot(bufferMemorySpace, sizeof(size_t));
+      auto sizeInfoBuffer = _rpcEngine->getMemoryManager()->allocateLocalMemorySlot(bufferMemorySpace, sizeof(size_t));
 
       // Initializing coordination buffers for message sizes and payloads (sets to zero the counters)
       HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForSizes);
       HiCR::channel::variableSize::Base::initializeCoordinationBuffer(coordinationBufferForPayloads);
 
       // Obtaining the globally exchanged memory slots
-      auto sizesBuffer                           = _communicationManager->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
-      auto consumerCoordinationBufferForSizes    = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
-      auto consumerCoordinationBufferForPayloads = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
-      auto payloadBuffer                         = _communicationManager->getGlobalMemorySlot(channelTag, CONSUMER_PAYLOAD_KEY);
+      auto sizesBuffer                           = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, SIZES_BUFFER_KEY);
+      auto consumerCoordinationBufferForSizes    = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_SIZES_KEY);
+      auto consumerCoordinationBufferForPayloads = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, CONSUMER_COORDINATION_BUFFER_FOR_PAYLOADS_KEY);
+      auto payloadBuffer                         = _rpcEngine->getCommunicationManager()->getGlobalMemorySlot(channelTag, CONSUMER_PAYLOAD_KEY);
 
       // Creating producer and consumer channels
-      producerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Producer>(*_communicationManager,
+      producerInterface = std::make_shared<HiCR::channel::variableSize::MPSC::locking::Producer>(*_rpcEngine->getCommunicationManager(),
                                                                                                  sizeInfoBuffer,
                                                                                                  payloadBuffer,
                                                                                                  sizesBuffer,
@@ -378,7 +372,7 @@ class Engine final
                                                                                                  bufferCapacity);
     }
 
-    return std::make_shared<Channel>(channelName, _memoryManager, bufferMemorySpace, consumerInterface, producerInterface);
+    return std::make_shared<Channel>(channelName, _rpcEngine->getMemoryManager(), bufferMemorySpace, consumerInterface, producerInterface);
   }
 
   /**
@@ -444,7 +438,7 @@ class Engine final
       std::shared_ptr<HiCR::Instance> newInstance;
       try
       {
-        newInstance = _instanceManager->createInstance(t);
+        newInstance = _rpcEngine->getInstanceManager()->createInstance(t);
       }
       catch(const std::exception& e)
       {
@@ -462,23 +456,11 @@ class Engine final
 
   protected:
 
-  /// The distributed engine's instance manager
-  HiCR::InstanceManager* const _instanceManager;
-
-  /// Storage for the distributed engine's communication manager
-  HiCR::CommunicationManager* const _communicationManager;
-
-  /// The distributed engine's memory manager
-  HiCR::MemoryManager* const _memoryManager;
-
   /// The RPC engine to use for all remote function requests
   HiCR::frontend::RPCEngine* const _rpcEngine;
 
   /// Storage for topology managers
   std::vector<std::unique_ptr<HiCR::TopologyManager>> _topologyManagers;
-
-  /// Storage for compute manager
-  std::unique_ptr<HiCR::backend::pthreads::ComputeManager> _computeManager;
 
   /// First device to use as buffer source
   std::shared_ptr<HiCR::Device> _firstDevice;

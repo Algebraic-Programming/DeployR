@@ -28,10 +28,10 @@ class DeployR final
   /**
    * Default constructor for DeployR. It creates the HiCR management engine and registers the basic functions needed during deployment.
    */
-  DeployR(HiCR::InstanceManager* instanceManager, HiCR::CommunicationManager* communicationManager, HiCR::MemoryManager* memoryManager, HiCR::frontend::RPCEngine* rpcEngine)
+  DeployR(HiCR::frontend::RPCEngine* rpcEngine)
   {
     // Creating engine object
-    _engine = std::make_unique<Engine>(instanceManager, communicationManager, memoryManager, rpcEngine);
+    _engine = std::make_unique<Engine>(rpcEngine);
 
     // Registering topology exchanging RPC
     registerFunction(__DEPLOYR_GET_TOPOLOGY_RPC_NAME, [this]() {

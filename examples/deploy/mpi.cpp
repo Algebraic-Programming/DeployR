@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
   // Grabbing first compute resource for computing incoming RPCs
   auto computeResource = *computeResources.begin();
 
-// Creating compute manager (responsible for executing the RPCs)
+  // Creating compute manager (responsible for executing the RPCs)
   HiCR::backend::pthreads::ComputeManager computeManager;
 
   // Creating RPC engine instance
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
   rpcEngine.initialize();
 
   // Creating deployr object
-  deployr::DeployR deployr(instanceManager.get(), communicationManager.get(), memoryManager.get(), &rpcEngine);
+  deployr::DeployR deployr(&rpcEngine);
 
   // File path to deployr's config
   auto deployrConfigFilePath = argv[1];
