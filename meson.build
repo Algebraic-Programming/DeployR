@@ -10,20 +10,20 @@ project('DeployR', [ 'cpp', 'c'],
 
 deployrDependencies = [ ]
 
-##### Getting selected distributed engine
+##### Getting selected distributed engines
 
-engine = get_option('engine')
+engines = get_option('engines')
 
-# If, selected, adding the dependency for the distributed engine
+# If, selected, adding the dependency for the distributed engines
 
-if engine == 'local'
+if 'local' in engines
   DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LOCAL'
 
   additionalHiCRBackends = [ ]
   additionalHiCRFrontends = [ ]
 endif
 
-if engine == 'mpi'
+if 'mpi' in engines
   DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_MPI'
   mpirunExecutable = find_program('mpirun', '/usr/bin/mpirun', '/usr/local/bin/mpirun', required : true)
 
@@ -31,14 +31,14 @@ if engine == 'mpi'
   additionalHiCRFrontends = [ ]
 endif
 
-if engine == 'lpf'
+if 'lpf' in engines
   DeployRDistributedCppFlag = '-D_DEPLOYR_DISTRIBUTED_ENGINE_LPF'
 
   additionalHiCRBackends = [ 'mpi', 'lpf' ]
   additionalHiCRFrontends = [ ]
 endif
 
-if engine == 'cloudr'
+if 'cloudr' in engines
   CloudRProject = subproject('cloudr', required: true, default_options: [  ])
   CloudRBuildDep = CloudRProject.get_variable('CloudRBuildDep')
   deployrDependencies += CloudRBuildDep

@@ -67,8 +67,13 @@ class DeployR final
     // Initializing distributed execution engine
     _engine->initialize();
 
-    // Running initial deployment operations
-    initialDeployment();
+    // Bifurcation point: this is only run by the non-coordinator instances
+    // they are captured until the coordinator syncs up with them
+    if (_engine->getCurrentInstance().isRootInstance() == false)
+    {
+      // Running initial deployment operations
+      initialDeployment();
+    }
   }
 
   /**

@@ -1,8 +1,9 @@
-option('engine', type : 'combo',
+option('engines',
+       type : 'array',
        choices : [ 'mpi', 'lpf', 'local', 'cloudr' ], 
-       description : 'Specifies which distributed execution engine to use',
-       value: 'local'
-       )
+       description : 'Specifies which distributed execution engine(s) to build examples with',
+       value: [ 'mpi' ]
+)
 
 option('buildTests', type : 'boolean', value : false,
        description: 'Indicates whether to build tests'
