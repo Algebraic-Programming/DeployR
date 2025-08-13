@@ -31,28 +31,28 @@ int main(int argc, char *argv[])
   }
 
   // Creating HWloc topology object
-  hwloc_topology_t topology;
+  hwloc_topology_t hwlocTopology;
 
   // Reserving memory for hwloc
-  hwloc_topology_init(&topology);
+  hwloc_topology_init(&hwlocTopology);
 
   // Initializing host (CPU) topology manager
-  HiCR::backend::hwloc::TopologyManager tm(&topology);
+  HiCR::backend::hwloc::TopologyManager tm(&hwlocTopology);
 
   // Gathering topology from the topology manager
-  const auto t = tm.queryTopology();
+  const auto topology = tm.queryTopology();
 
   // Selecting first device
-  auto d = *t.getDevices().begin();
+  auto device = *topology.getDevices().begin();
 
   // Getting memory space list from device
-  auto memSpaces = d->getMemorySpaceList();
+  auto memSpaces = device->getMemorySpaceList();
 
   // Grabbing first memory space for buffering
   auto bufferMemorySpace = *memSpaces.begin();
 
   // Now getting compute resource list from device
-  auto computeResources = d->getComputeResourceList();
+  auto computeResources = device->getComputeResourceList();
 
   // Grabbing first compute resource for computing incoming RPCs
   auto computeResource = *computeResources.begin();
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
   rpcEngine.initialize();
 
   // Creating deployr object
-  deployr::DeployR deployr(&rpcEngine);
+  deployr::DeployR deployr(&rpcEngine, topology);
 
   // File path to deployr's config
   auto deployrConfigFilePath = argv[1];

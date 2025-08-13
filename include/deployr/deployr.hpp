@@ -5,9 +5,10 @@
 #include <hicr/core/definitions.hpp>
 #include <nlohmann_json/json.hpp>
 #include <nlohmann_json/parser.hpp>
+#include <hicr/frontends/RPCEngine/RPCEngine.hpp>
+#include <hicr/backends/pthreads/computeManager.hpp>
 #include <algorithm>
 #include <vector>
-#include "engine.hpp"
 #include "request.hpp"
 #include "deployment.hpp"
 
@@ -18,8 +19,7 @@ namespace deployr
 {
 
 /**
- * Main runtime class of DeployR. This is the only entry point for end-users.Channel
- * It provides the functionality to deploy a deployment request and give access to the channels created among the created instances.
+ * Main runtime class of DeployR. This is the only entry point for end-users. It provides the functionality to deploy a deployment request
  */
 class DeployR final
 {
@@ -28,18 +28,17 @@ class DeployR final
   /**
    * Default constructor for DeployR. It creates the HiCR management engine and registers the basic functions needed during deployment.
    */
-  DeployR(HiCR::frontend::RPCEngine* rpcEngine)
+  DeployR(HiCR::frontend::RPCEngine* rpcEngine, const HiCR::Topology& localTopology)
+  : _rpcEngine(rpcEngine),
+    _localTopology(localTopology)
   {
-    // Creating engine object
-    _engine = std::make_unique<Engine>(rpcEngine);
-
     // Registering topology exchanging RPC
     registerFunction(__DEPLOYR_GET_TOPOLOGY_RPC_NAME, [this]() {
       // Serializing
-      const auto serializedTopology = _localTopology.dump();
+      const auto serializedTopology = _localTopology.serialize().dump();
 
       // Returning serialized topology
-      _engine->submitRPCReturnValue((void *)serializedTopology.c_str(), serializedTopology.size() + 1);
+      _rpcEngine->submitReturnValue((void *)serializedTopology.c_str(), serializedTopology.size() + 1);
     });
 
     // Registering deployment broadcasting RPC
@@ -48,7 +47,7 @@ class DeployR final
       const auto serializedDeployment = _deployment.serialize().dump();
 
       // Returning serialized topology
-      _engine->submitRPCReturnValue((void *)serializedDeployment.c_str(), serializedDeployment.size() + 1);
+      _rpcEngine->submitReturnValue((void *)serializedDeployment.c_str(), serializedDeployment.size() + 1);
     });
   }
 
@@ -64,12 +63,9 @@ class DeployR final
    */
   __INLINE__ void initialize()
   {
-    // Initializing distributed execution engine
-    _engine->initialize();
-
     // Bifurcation point: this is only run by the non-coordinator instances
     // they are captured until the coordinator syncs up with them
-    if (_engine->getCurrentInstance().isRootInstance() == false)
+    if (getCurrentInstance().isRootInstance() == false)
     {
       // Running initial deployment operations
       initialDeployment();
@@ -82,7 +78,7 @@ class DeployR final
    * If not enough (or too many) hosts are detected than the request needs, it will abort execution.
    * If a good mapping is found, it will run each of the requested instance in one of the found hosts and run its initial function.
    * 
-   * @param[in] request A request object containing all the required instances and channels that make a deployment.
+   * @param[in] request A request object containing all the required instances that make a deployment.
    */
   __INLINE__ void deploy(Request &request)
   {
@@ -90,14 +86,14 @@ class DeployR final
     if (this->getCurrentInstance().isRootInstance() == false) 
     {
       fprintf(stderr, "[DeployR] The deploy function can only be called from the root instance\n");
-      _engine->abort();
+      _rpcEngine->getInstanceManager()->abort(-1);
     }
 
     // Counting the exact number of instances requested.
     size_t instancesRequested = request.getInstances().size();
 
     // Getting the initial number of instances
-    size_t HiCRInstanceCount = _engine->getHiCRInstances().size();
+    size_t HiCRInstanceCount = _rpcEngine->getInstanceManager()->getInstances().size();
 
     // Printing instance count information
     // printf("[DeployR] Initial Instances:   %lu\n", HiCRInstanceCount);
@@ -111,21 +107,21 @@ class DeployR final
     if (HiCRInstanceCount > 1 && HiCRInstanceCount < instancesRequested)
     {
       fprintf(stderr, "[DeployR] More initial instances (%lu) provided than required (%lu) were provided.\n", HiCRInstanceCount, instancesRequested);
-      _engine->abort();
+      _rpcEngine->getInstanceManager()->abort(-2);
     }
 
     // If K > N, more initial instances than requested provided. Abort execution.
     if (HiCRInstanceCount > instancesRequested)
     {
       fprintf(stderr, "[DeployR] More initial instances (%lu) provided than required (%lu) were provided.\n", HiCRInstanceCount, instancesRequested);
-      _engine->abort();
+      _rpcEngine->getInstanceManager()->abort(-3);
     }
 
     // If K == 1, this is the cloud scenario. The rest of the instances will be created.
     if (HiCRInstanceCount == 1) deployRemainingInstances(request);
 
     // Updating number of instances available
-    HiCRInstanceCount = _engine->getHiCRInstances().size();
+    HiCRInstanceCount = _rpcEngine->getInstanceManager()->getInstances().size();
 
     // Building deployment object
     _deployment = Deployment(request);
@@ -137,7 +133,7 @@ class DeployR final
     for (size_t i = 0; i < _globalTopology.size(); i++)
     {
       // Getting instance id
-      const auto instanceId = _engine->getHiCRInstances()[i]->getId();
+      const auto instanceId = _rpcEngine->getInstanceManager()->getInstances()[i]->getId();
       
       // Adding corresponding host
       _deployment.addHost(Host(instanceId, _globalTopology[i]));
@@ -150,7 +146,7 @@ class DeployR final
               "[DeployR] The detected hosts (%lu) are either not sufficient for the requested instances (%lu) or their topology doesn't satisfy that of the requested instances.\n",
               HiCRInstanceCount,
               instancesRequested);
-      _engine->abort();
+      _rpcEngine->getInstanceManager()->abort(-4);
     }
 
     // Broadcasting deployment information to non-root instances
@@ -158,9 +154,6 @@ class DeployR final
 
     // Identifying this local instance
     _localInstance = identifyLocalInstance();
-
-    // Creating communication channels
-    createChannels();
 
     // Running initial function assigned to this host
     runInitialFunction();
@@ -181,33 +174,18 @@ class DeployR final
     if (_registeredFunctions.contains(functionName) == true)
     {
       fprintf(stderr, "The function '%s' was already registered.\n", functionName.c_str());
-      abort();
+      _rpcEngine->getInstanceManager()->abort(-5);
     }
 
     // Adding new RPC to the set
     _registeredFunctions.insert({functionName, fc});
 
     // Registering the function on the engine
-    _engine->registerRPC(functionName, fc);
+    registerRPC(functionName, fc);
   }
 
   /**
-   * Retrieves one of the channels creates during deployment.
-   * 
-   * If the provided name is not registered for this instance, the function will produce an exception.
-   * 
-   * @param[in] name The name of the channel to retrieve
-   * @return The requested channel
-   */
-  __INLINE__ Channel &getChannel(const std::string &name)
-  {
-    if (_channels.contains(name) == false) HICR_THROW_LOGIC("Requested channel ('%s') is not defined for this instance ('%s')\n", name.c_str(), _localInstance.getName().c_str());
-
-    return _channels.at(name).operator*();
-  }
-
-  /**
-   * Retrieves a deployment object with the information about the deployment (pairings, hosts, channels, request)
+   * Retrieves a deployment object with the information about the deployment (pairings, hosts, request)
    * 
    * This function must be called only after deploying
    * 
@@ -227,57 +205,65 @@ class DeployR final
   /**
    * Finalizes the deployment. Must be called by the root instance before exiting the applicataion
    */
-  __INLINE__ void finalize() { _engine->finalize(); }
+  __INLINE__ void finalize()
+  { 
+     // Nothing to do here so far
+  }
 
   /**
    * Fatally aborts execution. Must be used only in case of unsalvageable errors.
    */
-  __INLINE__ void abort() { _engine->abort(); }
+  __INLINE__ void abort()
+  {
+     _rpcEngine->getInstanceManager()->abort(-5);
+  }
 
   /**
    * Retrieves the RPC engine for direct use
    * 
    * @return A pointer to the internal RPC engine
    */
-  __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _engine->getRPCEngine(); }
-
-  /**
-   * Retrieves the list of HiCR instances currently running
-   * 
-   * @return A list of HiCR instances currently running
-   */
-  __INLINE__ HiCR::InstanceManager::instanceList_t getInstances() { return _engine->getHiCRInstances(); }
+  __INLINE__ HiCR::frontend::RPCEngine *getRPCEngine() { return _rpcEngine; }
 
     /**
    * Retrieves currently running instance
    * 
    * @return The current HiCR instance
    */
-  __INLINE__ HiCR::Instance& getCurrentInstance() { return _engine->getCurrentInstance(); }
-
-  /**
-   * Requests the root instance
-   * 
-   * @return A reference to the root instance
-   */
-  __INLINE__ HiCR::Instance& getRootInstance() const
-  {
-    return _engine->getRootInstance();
-  }
+  __INLINE__ HiCR::Instance& getCurrentInstance() { return *_rpcEngine->getInstanceManager()->getCurrentInstance(); }
 
   private:
+
+  __INLINE__ std::shared_ptr<HiCR::Instance> createInstance(const HiCR::InstanceTemplate t)
+  {
+      std::shared_ptr<HiCR::Instance> newInstance;
+      try
+      {
+        newInstance = _rpcEngine->getInstanceManager()->createInstance(t);
+      }
+      catch(const std::exception& e)
+      {
+        HICR_THROW_FATAL("[DeployR] Failed to create new instance. Reason: \n  + '%s'", e.what());
+      }
+      
+      if (newInstance.get() == nullptr)
+      {
+        fprintf(stderr, "Failed to create new instance with requested topology: %s\n", t.getTopology().serialize().dump(2).c_str());
+        abort();
+      }
+
+      return newInstance;
+  }
+
 
   // Function for engine deployment
   __INLINE__ void initialDeployment()
   {
-    // Getting local topology
-    _localTopology = _engine->detectLocalTopology();
-
     // Gathering global topology into the root instance
     _globalTopology = gatherGlobalTopology();
 
     // If this is not the root instance, wait for incoming RPCs
-    if (_engine->isRootInstance() == false)
+    if (isRootInstance() == false)
     {
       // Getting deployment information from the root instance
       _deployment = broadcastDeployment();
@@ -286,27 +272,10 @@ class DeployR final
       // Identifying local instance
       _localInstance = identifyLocalInstance();
 
-      // Creating communication channels
-      createChannels();
-
       // Running initial function assigned to this host
       runInitialFunction();
     }
   }
-
-  /**
-   * [Internal] Gets an array of HiCR instances, each one representing a Host
-   * 
-   * @return An array containing the HiCR instances detected/created
-   */
-  __INLINE__ HiCR::InstanceManager::instanceList_t getHiCRInstances() const { return _engine->getHiCRInstances(); }
-
-  /**
-   * [Internal] Checks whether the currently running instance is root
-   * 
-   * @return true, if this is a root instance. false, otherwise.
-   */
-  [[nodiscard]] __INLINE__ bool isRootInstance() const { return _engine->isRootInstance(); }
 
   /**
    * [Internal] Launches a provided function on the requested host
@@ -319,10 +288,10 @@ class DeployR final
     if (_registeredFunctions.contains(functionName) == false)
     {
       fprintf(stderr, "The function RPC '%s' is not registered. Please register it before initializing DeployR.\n", functionName.c_str());
-      abort();
+      _rpcEngine->getInstanceManager()->abort(-7);
     }
 
-    _engine->launchRPC(hostIdx, functionName);
+    launchRPC(hostIdx, functionName);
   }
 
   /**
@@ -336,23 +305,23 @@ class DeployR final
     std::vector<nlohmann::json> globalTopology;
 
     // If I am not root, listen for the incoming RPC and return an empty topology
-    if (isRootInstance() == false) _engine->listenRPCs();
+    if (isRootInstance() == false) _rpcEngine->listen();
 
     // If I am root, request topology from all instances
     else
-      for (const auto &instance : _engine->getHiCRInstances())
+      for (const auto &instance : _rpcEngine->getInstanceManager()->getInstances())
 
         // If its the root instance (me), just push my local topology
-        if (instance->isRootInstance() == true) globalTopology.push_back(_localTopology);
+        if (instance->isRootInstance() == true) globalTopology.push_back(_localTopology.serialize());
 
         // If not, it's another instance: send RPC and deserialize return value
         else
         {
           // Requesting RPC from the remote instance
-          _engine->launchRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
+          launchRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
 
           // Getting return value as a memory slot
-          auto returnValue = _engine->getRPCReturnValue(*instance);
+          auto returnValue = _rpcEngine->getReturnValue(*instance);
 
           // Receiving raw serialized topology information from the worker
           std::string serializedTopology = (char *)returnValue->getPointer();
@@ -361,7 +330,7 @@ class DeployR final
           auto topologyJson = nlohmann::json::parse(serializedTopology);
 
           // Freeing return value
-          _engine->freeRPCReturnValue(returnValue);
+          _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
 
           // Pushing topology into the vector
           globalTopology.push_back(topologyJson);
@@ -385,7 +354,7 @@ class DeployR final
     if (isRootInstance() == true)
     {
       // listen for the incoming RPCs and return an empty topology
-      for (size_t i = 0; i < _engine->getHiCRInstances().size() - 1; i++) _engine->listenRPCs();
+      for (size_t i = 0; i < _rpcEngine->getInstanceManager()->getInstances().size() - 1; i++) _rpcEngine->listen();
 
       // Copy my own deployment information
       deployment = _deployment;
@@ -395,10 +364,10 @@ class DeployR final
     else
     {
       // Requessting RPC from the remote instance
-      _engine->launchRPC(_engine->getRootInstanceIndex(), __DEPLOYR_GET_DEPLOYMENT_RPC_NAME);
+      launchRPC(getRootInstanceIndex(), __DEPLOYR_GET_DEPLOYMENT_RPC_NAME);
 
       // Getting return value as a memory slot
-      auto returnValue = _engine->getRPCReturnValue(_engine->getRootInstance());
+      auto returnValue = _rpcEngine->getReturnValue(getRootInstance());
 
       // Receiving raw serialized topology information from the worker
       std::string serializedDeployment = (char *)returnValue->getPointer();
@@ -407,7 +376,7 @@ class DeployR final
       auto deploymentJson = nlohmann::json::parse(serializedDeployment);
 
       // Freeing return value
-      _engine->freeRPCReturnValue(returnValue);
+      _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
 
       // Pushing topology into the vector
       deployment = Deployment(deploymentJson);
@@ -415,64 +384,6 @@ class DeployR final
 
     // Return global topology
     return deployment;
-  }
-
-  /**
-   * Creates all requested channels in the request
-   */
-  __INLINE__ void createChannels()
-  {
-    // Getting original request
-    const auto &request = _deployment.getRequest();
-
-    // Getting set of channels from request
-    const auto &channels = request.getChannels();
-
-    // Creating each channel
-    for (size_t i = 0; i < channels.size(); i++)
-    {
-      // Gettting reference to the current channel
-      const auto &channel = channels[i];
-
-      // Getting channel's name
-      const auto &name = channel.getName();
-
-      // Getting channel's producers
-      const auto &producers = channel.getProducers();
-
-      // Getting channel's consumer
-      const auto &consumer = channel.getConsumer();
-
-      // Getting buffer capacity (max token count)
-      const auto &bufferCapacity = channel.getBufferCapacity();
-
-      // Getting buffer size (bytes)
-      const auto &bufferSize = channel.getBufferSize();
-
-      // Getting producer HiCR instance list
-      std::vector<HiCR::Instance::instanceId_t> producerInstances;
-      for (const auto &producer : producers)
-      {
-        const auto hostId = _deployment.getPairings().at(producer);
-        const auto instanceId = _deployment.getHosts()[hostId].getInstanceId();
-        producerInstances.push_back(instanceId);
-      }
-
-      // Getting consumer instance id
-      const auto hostId = _deployment.getPairings().at(consumer);
-      const auto consumerInstance = _deployment.getHosts()[hostId].getInstanceId();
-
-      // Getting channel unique id (required as a tag by HiCR channels)
-      const auto channelId = i;
-      // const auto& localInstanceName = _localInstance.getName();
-      // printf("Instance '%s' - Creating channel %lu '%s'\n", localInstanceName.c_str(), channelId, channels[i].getName().c_str());
-
-      // Creating channel object
-      const auto channelObject = _engine->createChannel(channelId, name, producerInstances, consumerInstance, bufferCapacity, bufferSize);
-
-      // Adding channel to map, only if defined
-      if (channelObject != nullptr) _channels[name] = channelObject;
-    }
   }
 
   /**
@@ -493,7 +404,7 @@ class DeployR final
     for (const auto &p : pairings)
     {
       const auto& instanceId = hostList[p.second].getInstanceId();
-      if (instanceId == _engine->getCurrentInstance().getId())
+      if (instanceId == getCurrentInstance().getId())
       {
         localInstanceName = p.first;
         break;
@@ -516,7 +427,7 @@ class DeployR final
     if (_registeredFunctions.contains(fcName) == false)
     {
       fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", fcName.c_str());
-      abort();
+      _rpcEngine->getInstanceManager()->abort(-8);
     }
 
     // Getting function pointer
@@ -528,9 +439,6 @@ class DeployR final
 
   __INLINE__ void deployRemainingInstances(Request &request)
   {
-    // Getting local topology
-    auto localTopology = _engine->detectLocalTopology();
-
     // Making a copy of the requested instances. One of them will be satisfied (and removed) by the currently running instance
     auto requestedInstances = request.getInstances();
 
@@ -546,7 +454,7 @@ class DeployR final
       const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
       
       // Checking for compatibility
-      deployr::Host localHost(0, localTopology);
+      deployr::Host localHost(0, _localTopology.serialize());
       const bool isCompatible = localHost.checkCompatibility(requestedHostType);
       // printf("Instance %s with type %s is %scompatible\n", requestedInstanceName.c_str(), requestedHostType.getName().c_str(), isCompatible ? "" : "not ");
       
@@ -573,14 +481,83 @@ class DeployR final
       const auto requestedTemplate = HiCR::InstanceTemplate(requestedTopology);
 
       // Creating new instance
-      auto newInstance = _engine->createInstance(requestedTemplate);
+      auto newInstance = createInstance(requestedTemplate);
     }
 
-    // printf("Active instances: %lu\n", _engine->getHiCRInstances().size() );
+    // printf("Active instances: %lu\n", _rpcEngine->getInstanceManager()->getInstances().size() );
   }
 
-  /// A pointer to the HiCR Manager Engine used to run low-level operations
-  std::unique_ptr<Engine> _engine;
+  /**
+  * Function to request the execution of an RPC in a remote instance
+  * 
+  * @param[in] instance HiCR instance to execute this RPC
+  * @param[in] RPCName Name of the function to run. It must have been registered in the target instance beforehand to work
+  */
+  __INLINE__ void launchRPC(HiCR::Instance& instance, const std::string &RPCName)
+  {
+    _rpcEngine->requestRPC(instance, RPCName);
+  }
+
+  /**
+    * Function to request the execution of an RPC in a remote instance
+    * 
+    * @param[in] instanceIndex Index within the HiCR instance list corresponding to the instance that must execute this RPC
+    * @param[in] RPCName Name of the function to run. It must have been registered in the target instance beforehand to work
+    */
+  __INLINE__ void launchRPC(const size_t instanceIndex, const std::string &RPCName)
+  {
+    auto &instances = _rpcEngine->getInstanceManager()->getInstances();
+    auto &instance  = instances[instanceIndex];
+    this->launchRPC(*instance, RPCName);
+  }
+
+  /**
+  * Registers a function as target for an RPC
+  * 
+  * @param[in] RPCName The name of the function to register
+  * @param[in] fc The actual function to register
+  */
+  __INLINE__ void registerRPC(const std::string &RPCName, std::function<void()> fc)
+  {
+    // Registering RPC
+    auto RPCExecutionUnit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit([fc](void *) { fc(); });
+
+    // Adding RPC
+    _rpcEngine->addRPCTarget(RPCName, RPCExecutionUnit);
+  }
+
+  /**
+    * Gets the index within the HiCR instance list corresponding to the root instance
+    * 
+    * @return The index within the HiCR instance list corresponding to the root instance
+    */
+  [[nodiscard]] __INLINE__ size_t getRootInstanceIndex() const
+  {
+    const auto &instances = _rpcEngine->getInstanceManager()->getInstances();
+    for (size_t i = 0; i < instances.size(); i++)
+      if (instances[i]->isRootInstance()) return i;
+    return 0;
+  }
+
+  /**
+  * Gets the HiCR instance object corresponding to the root instance
+  * 
+  * @return A HiCR instance object corresponding to the root instance
+  */
+__INLINE__ HiCR::Instance &getRootInstance() const
+  {
+    auto &instances = _rpcEngine->getInstanceManager()->getInstances();
+    for (size_t i = 0; i < instances.size(); i++)
+      if (instances[i]->isRootInstance()) return *(instances[i]);
+    return *(instances[0]);
+  }
+
+  /**
+  * Indicates whether the local instance is the HiCR root instance
+  * 
+  * @return true, if this is the root instance; false, otherwise.
+  */
+  [[nodiscard]] __INLINE__ bool isRootInstance() const { return _rpcEngine->getInstanceManager()->getCurrentInstance()->getId() == _rpcEngine->getInstanceManager()->getRootInstanceId(); }
 
   /// A map of registered functions, targets for an instance's initial function
   std::map<std::string, std::function<void()>> _registeredFunctions;
@@ -588,17 +565,17 @@ class DeployR final
   /// Local instance object
   Request::Instance _localInstance;
 
-  /// Storage for the local system topology
-  nlohmann::json _localTopology;
-
   /// Storage for the global system topology
   std::vector<nlohmann::json> _globalTopology;
 
-  /// Map of created channels
-  std::map<std::string, std::shared_ptr<Channel>> _channels;
-
   // Object containing the information of the deployment
   Deployment _deployment;
+
+  /// The RPC engine to use for all remote function requests
+  HiCR::frontend::RPCEngine* const _rpcEngine;
+
+  /// Storage for the local system topology
+  HiCR::Topology _localTopology;
 
 }; // class DeployR
 
