@@ -18,6 +18,13 @@ int main(int argc, char *argv[])
   auto memoryManager           = HiCR::backend::mpi::MemoryManager();
   auto computeManager          = HiCR::backend::pthreads::ComputeManager();
 
+  // Checking arguments
+  if (argc != 2)
+  {
+    fprintf(stderr, "Error: Must provide (1) a DeployR JSON configuration file.\n");
+    instanceManager->abort(-1);
+  }
+
   // Reserving memory for hwloc
   hwloc_topology_t hwlocTopology;
   hwloc_topology_init(&hwlocTopology);
@@ -40,29 +47,14 @@ int main(int argc, char *argv[])
   // Instantiating CloudR
   HiCR::backend::cloudr::InstanceManager cloudrInstanceManager(&rpcEngine, topology, [&]()
   {
-    // Checking if I'm root
-    bool isRoot = cloudrInstanceManager.getCurrentInstance()->isRootInstance();
-
     // Configuration for deployR. Only needs to be provided by the root instance
     nlohmann::json deployrConfigJs;
 
-    // Only parse arguments if I'm the root instance
-    if (isRoot == true) 
-    {
-      // Checking arguments
-      if (argc != 2)
-      {
-        fprintf(stderr, "Error: Must provide (1) a DeployR JSON configuration file.\n");
-        cloudrInstanceManager.abort(-1);
-      }
-    }
-    
     // Getting DeployR configuration file path from arguments
     auto deployrConfigFilePath = argv[1];
 
     // Parsing DeployR configuration file contents to a JSON object
-    std::ifstream ifs(deployrConfigFilePath);
-    deployrConfigJs = nlohmann::json::parse(ifs);
+    deployrConfigJs = nlohmann::json::parse(std::ifstream(deployrConfigFilePath));
 
     // Creating deployr object
     deployr::DeployR deployr(&cloudrInstanceManager, &rpcEngine, topology);

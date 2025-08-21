@@ -15,30 +15,21 @@ int main(int argc, char *argv[])
   auto communicationManager = std::make_shared<HiCR::backend::mpi::CommunicationManager>();
   auto memoryManager        = std::make_shared<HiCR::backend::mpi::MemoryManager>();
 
-  // Checking if I'm root
-  bool isRoot = instanceManager->getCurrentInstance()->isRootInstance();
+  // Parsing arguments
+  if (argc != 2)
+  {
+    fprintf(stderr, "Error: Must provide a DeployR JSON configuration file\n");
+    instanceManager->abort(-1);
+  }
 
   // Configuration for deployR. Only needs to be provided by the root instance
   nlohmann::json deployrConfigJs;
 
-  // Parsing arguments (only if I'm root)
-  if (isRoot)
-  {
-    // Checking arguments
-    if (argc != 2)
-    {
-      fprintf(stderr, "Error: Must provide a DeployR JSON configuration file\n");
-      instanceManager->abort(-1);
-      return -1;
-    }
+  // Getting DeployR configuration file path from arguments
+  auto deployrConfigFilePath = argv[1];
 
-      // Getting DeployR configuration file path from arguments
-      auto deployrConfigFilePath = argv[1];
-
-      // Parsing DeployR configuration file contents to a JSON object
-      std::ifstream ifs(deployrConfigFilePath);
-      deployrConfigJs = nlohmann::json::parse(ifs);
-  }
+  // Parsing DeployR configuration file contents to a JSON object
+  deployrConfigJs = nlohmann::json::parse(std::ifstream(deployrConfigFilePath));
 
   // Creating HWloc topology object
   hwloc_topology_t hwlocTopology;
