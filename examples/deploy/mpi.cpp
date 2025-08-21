@@ -15,8 +15,11 @@ int main(int argc, char *argv[])
   auto communicationManager = std::make_shared<HiCR::backend::mpi::CommunicationManager>();
   auto memoryManager        = std::make_shared<HiCR::backend::mpi::MemoryManager>();
 
-// Checking if I'm root
+  // Checking if I'm root
   bool isRoot = instanceManager->getCurrentInstance()->isRootInstance();
+
+  // Configuration for deployR. Only needs to be provided by the root instance
+  nlohmann::json deployrConfigJs;
 
   // Parsing arguments (only if I'm root)
   if (isRoot)
@@ -28,6 +31,13 @@ int main(int argc, char *argv[])
       instanceManager->abort(-1);
       return -1;
     }
+
+      // Getting DeployR configuration file path from arguments
+      auto deployrConfigFilePath = argv[1];
+
+      // Parsing DeployR configuration file contents to a JSON object
+      std::ifstream ifs(deployrConfigFilePath);
+      deployrConfigJs = nlohmann::json::parse(ifs);
   }
 
   // Creating HWloc topology object
@@ -67,13 +77,10 @@ int main(int argc, char *argv[])
   rpcEngine.initialize();
 
   // Creating deployr object
-  deployr::DeployR deployr(&rpcEngine, topology);
-
-  // File path to deployr's config
-  auto deployrConfigFilePath = argv[1];
+  deployr::DeployR deployr(instanceManager.get(), &rpcEngine, topology);
 
   // Calling main algorithm driver
-  deploy(deployr, deployrConfigFilePath);
+  deploy(deployr, deployrConfigJs);
 
   // Finalizing instance manager
   instanceManager->finalize();

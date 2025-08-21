@@ -1,64 +1,82 @@
+#include <fstream>
 #include <deployr/deployr.hpp>
 #include <nlohmann_json/json.hpp>
-#include <fstream>
 #include <hicr/backends/cloudr/instanceManager.hpp>
+#include <hicr/backends/cloudr/communicationManager.hpp>
+#include <hicr/backends/mpi/communicationManager.hpp>
+#include <hicr/backends/mpi/memoryManager.hpp>
+#include <hicr/backends/mpi/instanceManager.hpp>
+#include <hicr/backends/hwloc/topologyManager.hpp>
 #include <deployr/deployr.hpp>
 #include "deploy.hpp"
 
-int cloudRMain(HiCR::backend::cloudr::InstanceManager *cloudr, int argc, char *argv[])
-{
-  // Getting CloudR managers
-  auto communicationManager = cloudr->getCommunicationManager().get();
-  auto memoryManager        = cloudr->getMemoryManager().get(); 
-
-  // Getting CloudR's RPC engine
-  auto rpcEngine = cloudr->getRPCEngine();
-
-  // Creating deployr object
-  deployr::DeployR deployr(cloudr, communicationManager, memoryManager, rpcEngine);
-
-  // File path to deployr's config
-  auto deployrConfigFilePath = argv[1];
-
-  // Calling main algorithm driver
-  deploy(deployr, deployrConfigFilePath);
-
-  return 0;
-}
-
 int main(int argc, char *argv[])
 {
-  HiCR::backend::cloudr::InstanceManager cloudr(cloudRMain);
-  cloudr.initialize(&argc, &argv);
+  // Instantiating base managers
+  auto instanceManager         = HiCR::backend::mpi::InstanceManager::createDefault(&argc, &argv);
+  auto communicationManager    = HiCR::backend::mpi::CommunicationManager(MPI_COMM_WORLD);
+  auto memoryManager           = HiCR::backend::mpi::MemoryManager();
+  auto computeManager          = HiCR::backend::pthreads::ComputeManager();
 
-  // Checking if I'm root
-  bool isRoot = cloudr.getCurrentInstance()->getId() == cloudr.getRootInstanceId();
+  // Reserving memory for hwloc
+  hwloc_topology_t hwlocTopology;
+  hwloc_topology_init(&hwlocTopology);
 
-  // Only do the following if I'm root
-  if (isRoot)
+  // Initializing HWLoc-based host (CPU) topology manager
+  auto hwlocTopologyManager = HiCR::backend::hwloc::TopologyManager(&hwlocTopology);
+
+  // Finding the first memory space and compute resource to create our RPC engine
+  const auto& topology           = hwlocTopologyManager.queryTopology();
+  const auto& firstDevice        = topology.getDevices().begin().operator*();
+  const auto& RPCMemorySpace     = firstDevice->getMemorySpaceList().begin().operator*();
+  const auto& RPCComputeResource = firstDevice->getComputeResourceList().begin().operator*();
+  
+  // Instantiating RPC engine
+  HiCR::frontend::RPCEngine rpcEngine(communicationManager, *instanceManager, memoryManager, computeManager, RPCMemorySpace, RPCComputeResource);
+
+  // Initializing RPC engine
+  rpcEngine.initialize();
+
+  // Instantiating CloudR
+  HiCR::backend::cloudr::InstanceManager cloudrInstanceManager(&rpcEngine, topology, [&]()
   {
-    // Checking arguments
-    if (argc != 3)
+    // Checking if I'm root
+    bool isRoot = cloudrInstanceManager.getCurrentInstance()->isRootInstance();
+
+    // Configuration for deployR. Only needs to be provided by the root instance
+    nlohmann::json deployrConfigJs;
+
+    // Only parse arguments if I'm the root instance
+    if (isRoot == true) 
     {
-      fprintf(stderr, "Error: Must provide (1) a DeployR JSON configuration file, (2) a CloudR JSON configuration file.\n");
-      cloudr.abort(-1);
-      return -1;
+      // Checking arguments
+      if (argc != 2)
+      {
+        fprintf(stderr, "Error: Must provide (1) a DeployR JSON configuration file.\n");
+        cloudrInstanceManager.abort(-1);
+      }
     }
+    
+    // Getting DeployR configuration file path from arguments
+    auto deployrConfigFilePath = argv[1];
 
-    // Getting CloudR configuration file name from arguments
-    std::string cloudrConfigurationFilePath = std::string(argv[2]);
+    // Parsing DeployR configuration file contents to a JSON object
+    std::ifstream ifs(deployrConfigFilePath);
+    deployrConfigJs = nlohmann::json::parse(ifs);
 
-    // Parsing CloudR configuration file contents to a JSON object
-    std::ifstream ifs(cloudrConfigurationFilePath);
-    auto          cloudrConfigurationJs = nlohmann::json::parse(ifs);
+    // Creating deployr object
+    deployr::DeployR deployr(&cloudrInstanceManager, &rpcEngine, topology);
 
-    // Configuring emulated instance topologies
-    cloudr.setConfiguration(cloudrConfigurationJs);
+    // Calling main algorithm driver
+    deploy(deployr, deployrConfigJs);
+  });
 
-    // Calling what's supposed to be cloudR main
-    cloudRMain(&cloudr, argc, argv);
-  }
+  // Initializing CloudR
+  cloudrInstanceManager.initialize();
 
-  // Finalizing cloudr
-  cloudr.finalize();
+  // Finalizing cloudR
+  cloudrInstanceManager.finalize();
+
+  // Finalizing base instance manager
+  instanceManager->finalize();
 }

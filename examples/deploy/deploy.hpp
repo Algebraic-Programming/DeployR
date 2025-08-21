@@ -16,10 +16,8 @@ void workerFc(deployr::DeployR &deployr)
   printf("[WorkerFc] Hi, I am '%s'\n", instanceName.c_str());
 }
 
-void deploy(deployr::DeployR &deployr, const char* deployrConfigFilePath)
+void deploy(deployr::DeployR &deployr, const nlohmann::json& deployrConfigJs)
 {
-  bool isRoot = deployr.getCurrentInstance().isRootInstance();
-  
   // Registering Functions
   deployr.registerFunction("CoordinatorFc", [&]() { coordinatorFc(deployr); });
   deployr.registerFunction("WorkerFc", [&]() { workerFc(deployr); });
@@ -27,17 +25,9 @@ void deploy(deployr::DeployR &deployr, const char* deployrConfigFilePath)
   // Initializing deployr
   deployr.initialize();
 
-  // If I'm root, do the deployment
-  if (isRoot)
-  {
-    // Parsing DeployR configuration file contents to a JSON object
-    std::ifstream ifs(deployrConfigFilePath);
-    auto          deployrConfigJs = nlohmann::json::parse(ifs);
+  // Creating request
+  deployr::Request request(deployrConfigJs);
 
-    // Creating request
-    deployr::Request request(deployrConfigJs);
-
-    // Deploying request, getting deployment
-    deployr.deploy(request);
-  }
+  // Deploying request, getting deployment
+  deployr.deploy(request);
 }

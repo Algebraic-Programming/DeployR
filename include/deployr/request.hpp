@@ -9,7 +9,7 @@ namespace deployr
 {
 
 /**
- * A request object, representing a user's requirements for a deployment. This involves the instances, their hardware requirements, and the channels to create among them.
+ * A request object, representing a user's requirements for a deployment. This involves the instances, and their hardware requirements
  */
 class Request final
 {
@@ -270,19 +270,6 @@ class Request final
       // If not repeated, push the new host type
       _instances.insert({instanceName, instance});
     }
-
-    // Getting channels entry
-    const auto &channelsJs = hicr::json::getArray<nlohmann::json>(requestJs, "Channels");
-
-    // Parsing individual channels
-    for (const auto &channelJs : channelsJs)
-    {
-      // Creating instance object
-      const auto channel = Channel(channelJs);
-
-      // If not repeated, push the new host type
-      _channels.push_back(channel);
-    }
   }
 
   /**
@@ -298,13 +285,6 @@ class Request final
    * @return the instance map
    */
   [[nodiscard]] __INLINE__ const std::map<std::string, Instance> &getInstances() const { return _instances; }
-
-  /**
-   * Gets the channel vector
-   * 
-   * @return the channel vector
-   */
-  [[nodiscard]] __INLINE__ const std::vector<Channel> &getChannels() const { return _channels; }
 
   /**
    * Gets the request name
@@ -337,9 +317,6 @@ class Request final
 
   /// A map of instances requested, indexed by name
   std::map<std::string, Instance> _instances;
-
-  /// An array of channels that are required to be created upon deployment
-  std::vector<Channel> _channels;
 
 }; // class Request
 

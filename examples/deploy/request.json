@@ -31,7 +31,7 @@
                         [
                             {
                                 "Type": "RAM",
-                                "Size": 274877906944,
+                                "Size": 4294967296,
                                 "Usage": 0
                             }
                         ]
@@ -57,24 +57,6 @@
             "Name": "Worker 2",
             "Host Type": "Compute",
             "Function": "WorkerFc"
-        }
-    ],
-
-    "Channels":
-    [
-        {
-            "Name": "Coordinator -> Worker 1", 
-            "Producers": [ "Coordinator" ],
-            "Consumer": "Worker 1",
-            "Buffer Capacity (Tokens)": 8,
-            "Buffer Size (Bytes)": 1024 
-        },
-        {
-            "Name": "Coordinator -> Worker 2",
-            "Producers": [ "Coordinator" ],
-            "Consumer": "Worker 2",
-            "Buffer Capacity (Tokens)": 8,
-            "Buffer Size (Bytes)": 1024
         }
     ]
 }
