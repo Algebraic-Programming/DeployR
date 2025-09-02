@@ -15,22 +15,6 @@ int main(int argc, char *argv[])
   auto communicationManager = std::make_shared<HiCR::backend::mpi::CommunicationManager>();
   auto memoryManager        = std::make_shared<HiCR::backend::mpi::MemoryManager>();
 
-  // Parsing arguments
-  if (argc != 2)
-  {
-    fprintf(stderr, "Error: Must provide a DeployR JSON configuration file\n");
-    instanceManager->abort(-1);
-  }
-
-  // Configuration for deployR. Only needs to be provided by the root instance
-  nlohmann::json deployrConfigJs;
-
-  // Getting DeployR configuration file path from arguments
-  auto deployrConfigFilePath = argv[1];
-
-  // Parsing DeployR configuration file contents to a JSON object
-  deployrConfigJs = nlohmann::json::parse(std::ifstream(deployrConfigFilePath));
-
   // Creating HWloc topology object
   hwloc_topology_t hwlocTopology;
 
@@ -64,6 +48,10 @@ int main(int argc, char *argv[])
   // Creating RPC engine instance
   HiCR::frontend::RPCEngine rpcEngine(*communicationManager, *instanceManager, *memoryManager, computeManager, bufferMemorySpace, computeResource);
 
+  // Gathering instances to run the example with
+  std::vector<HiCR::Instance*> instances;
+  for (const auto& instance : instanceManager->getInstances()) instances.push_back(instance.get());
+
   // Initialize RPC engine
   rpcEngine.initialize();
 
@@ -71,7 +59,7 @@ int main(int argc, char *argv[])
   deployr::DeployR deployr(instanceManager.get(), &rpcEngine, topology);
 
   // Calling main algorithm driver
-  deploy(deployr, deployrConfigJs);
+  deploy(deployr, instances);
 
   // Finalizing instance manager
   instanceManager->finalize();

@@ -13,7 +13,6 @@
 #include "deployment.hpp"
 
 #define __DEPLOYR_GET_TOPOLOGY_RPC_NAME "[DeployR] Get Topology"
-#define __DEPLOYR_GET_DEPLOYMENT_RPC_NAME "[DeployR] Get Deployment"
 
 namespace deployr
 {
@@ -38,21 +37,12 @@ class DeployR final
     _localTopology(localTopology)
   {
     // Registering topology exchanging RPC
-    registerFunction(__DEPLOYR_GET_TOPOLOGY_RPC_NAME, [this]() {
+    registerRPC(__DEPLOYR_GET_TOPOLOGY_RPC_NAME, [this]() {
       // Serializing
       const auto serializedTopology = _localTopology.serialize().dump();
 
       // Returning serialized topology
       _rpcEngine->submitReturnValue((void *)serializedTopology.c_str(), serializedTopology.size() + 1);
-    });
-
-    // Registering deployment broadcasting RPC
-    registerFunction(__DEPLOYR_GET_DEPLOYMENT_RPC_NAME, [this]() {
-      // Serializing
-      const auto serializedDeployment = _deployment.serialize().dump();
-
-      // Returning serialized topology
-      _rpcEngine->submitReturnValue((void *)serializedDeployment.c_str(), serializedDeployment.size() + 1);
     });
   }
 
@@ -60,9 +50,6 @@ class DeployR final
 
   /**
    * The initialization function for DeployR.
-   * 
-   * It initializes the HiCR management engine, detects the local topology, broadcasts the global topology to the root instance.
-   * All instances need to be call this function before the root instance can request a deployment. Only the root instance will continue thereafter. 
    * 
    * @return True, if this is the root rank; False, otherwise
    */
@@ -78,84 +65,75 @@ class DeployR final
    * 
    * @param[in] request A request object containing all the required instances that make a deployment.
    */
-  __INLINE__ void deploy(Request &request)
+  __INLINE__ void deploy(Request &request, const std::vector<HiCR::Instance*> instances)
   {
+    // Gatherince instance ids into a set
+    std::set<HiCR::Instance::instanceId_t> instanceIds;
+    for (const auto& instance : instances) instanceIds.insert(instance->getId());
+
+    // If I am not among the participating instances, simply return
+    if (instanceIds.contains(_instanceManager->getCurrentInstance()->getId()) == false) return;
+
+    // Designating coordinator instance for the deployment
+    const auto coordinatorInstanceId = *instanceIds.begin();
+
+    // Gathering global topology into the root instance
+    _globalTopology = gatherGlobalTopology(instances);
+
     // Bifurcation point: this is only run by the non-coordinator instance
     // they are captured until the coordinator syncs up with them
-    if (this->getCurrentInstance().isRootInstance() == false) 
-    {
-      // Running initial deployment operations
-      initialDeployment();
-
-      // Returning immediately
-      return;
-    }
+    if (getCurrentHiCRInstance().getId() != coordinatorInstanceId) { _rpcEngine->listen(); return; }
 
     // Counting the exact number of instances requested.
     size_t instancesRequested = request.getInstances().size();
 
-    // Getting the initial number of instances
-    size_t HiCRInstanceCount = _instanceManager->getInstances().size();
+    // Getting the number of provided instances
+    size_t providedInstanceCount = instances.size();
 
-    // Printing instance count information
-    // printf("[DeployR] Initial Instances:   %lu\n", HiCRInstanceCount);
-    // printf("[DeployR] Requested Instances: %lu\n", instancesRequested);
-
-    // We handle the following scenarios:
-    // With N: number of requested instances
-    // With K: number of initial instances
-
-    // If K > 1 && K < N, this is an irregular start, which is not handled. Abort
-    if (HiCRInstanceCount > 1 && HiCRInstanceCount < instancesRequested)
-    {
-      fprintf(stderr, "[DeployR] More initial instances (%lu) provided than required (%lu) were provided.\n", HiCRInstanceCount, instancesRequested);
-      _instanceManager->abort(-2);
-    }
-
-    // If K > N, more initial instances than requested provided. Abort execution.
-    if (HiCRInstanceCount > instancesRequested)
-    {
-      fprintf(stderr, "[DeployR] More initial instances (%lu) provided than required (%lu) were provided.\n", HiCRInstanceCount, instancesRequested);
-      _instanceManager->abort(-3);
-    }
-
-    // If K == 1, this is the cloud scenario. The rest of the instances will be created.
-    if (HiCRInstanceCount == 1) deployRemainingInstances(request);
-
-    // Updating number of instances available
-    HiCRInstanceCount = _instanceManager->getInstances().size();
+    // If K != N, a different number instances provided than requested. 
+    if (providedInstanceCount != instancesRequested) HICR_THROW_LOGIC("[DeployR] Different number of instances (%lu) required than provided (%lu).", providedInstanceCount, instancesRequested);
 
     // Building deployment object
     _deployment = Deployment(request);
 
-    // Exchanging information with other instances by running the initial deployment function
-    initialDeployment();
-
     // Adding hosts to the deployment object
-    for (size_t i = 0; i < _globalTopology.size(); i++)
+    for (size_t i = 0; i < instances.size(); i++)
     {
       // Getting instance id
-      const auto instanceId = _instanceManager->getInstances()[i]->getId();
+      const auto instanceId = instances[i]->getId();
       
       // Adding corresponding host
-      _deployment.addHost(Host(instanceId, _globalTopology[i]));
+      _deployment.addHost(Host(instanceId, _globalTopology[instanceId]));
     } 
 
     // Proceed with request to instance matching
     if (_deployment.performMatching() == false)
     {
-      fprintf(stderr,
-              "[DeployR] The detected hosts (%lu) are either not sufficient for the requested instances (%lu) or their topology doesn't satisfy that of the requested instances.\n",
-              HiCRInstanceCount,
+      HICR_THROW_LOGIC("[DeployR] The provided HiCR instances (%lu) are either not sufficient for the requested instances (%lu) or their topology doesn't satisfy that of the requested instances.",
+              providedInstanceCount,
               instancesRequested);
-      _instanceManager->abort(-4);
     }
 
-    // Broadcasting deployment information to non-root instances
-    broadcastDeployment();
+    // Sending RPCs to the paired hosts to start deployment
+    for (const auto& pairing : _deployment.getPairings())
+    {
+       const auto instanceId = pairing.first;
+       const auto& initialFcName = request.getInstances().at(instanceId).getFunction();
+       const auto hostIdx = pairing.second;
+       const auto& host = _instanceManager->getInstances().at(hostIdx);
+       const auto hostInstanceId = host->getId();
+       
+       // If the pairing refers to this host, assign its function name but delay execution
+       if (hostInstanceId == _instanceManager->getCurrentInstance()->getId())
+       {
+        _initialFunction = initialFcName;
+        _instanceId = instanceId;
+        continue;
+       }
 
-    // Identifying this local instance
-    _localInstance = identifyLocalInstance();
+       // Sending RPC
+      _rpcEngine->requestRPC(*host, initialFcName, instanceId);
+    }
 
     // Running initial function assigned to this host
     runInitialFunction();
@@ -173,36 +151,28 @@ class DeployR final
   __INLINE__ void registerFunction(const std::string &functionName, std::function<void()> fc)
   {
     // Checking if the RPC name was already used
-    if (_registeredFunctions.contains(functionName) == true)
-    {
-      fprintf(stderr, "The function '%s' was already registered.\n", functionName.c_str());
-      _instanceManager->abort(-5);
-    }
+    if (_registeredFunctions.contains(functionName) == true) HICR_THROW_LOGIC("The function '%s' was already registered.", functionName.c_str());
 
     // Adding new RPC to the set
     _registeredFunctions.insert({functionName, fc});
 
-    // Registering the function on the engine
+    // Adding function to RPC Engine
     registerRPC(functionName, fc);
   }
 
   /**
-   * Retrieves a deployment object with the information about the deployment (pairings, hosts, request)
+   * Retrieves the id of the running instance
    * 
-   * This function must be called only after deploying
-   * 
-   * @return The deployment object
+   * @return The id of the running instance
    */
-  [[nodiscard]] __INLINE__ const Deployment &getDeployment() const { return _deployment; }
+  [[nodiscard]] __INLINE__ const Request::Instance::instanceId_t getInstanceId() const
+  {
+    // If I am root, I remembered my instance Id
+    if (_instanceManager->getCurrentInstance()->isRootInstance() == true) return _instanceId;
 
-  /**
-   * Retrieves the instance request corresponding to the local running instance
-   * 
-   * This function must be called only after initializing
-   * 
-   * @return The instance request object
-   */
-  [[nodiscard]] __INLINE__ const Request::Instance &getLocalInstance() const { return _localInstance; }
+    // Otherwise, get it from the RPC engine
+    return _rpcEngine->getRPCArgument();
+  }
 
   /**
    * Finalizes the deployment. Must be called by the root instance before exiting the applicataion
@@ -217,7 +187,7 @@ class DeployR final
    */
   __INLINE__ void abort()
   {
-     _instanceManager->abort(-5);
+     _instanceManager->abort(-1);
   }
 
   /**
@@ -232,7 +202,7 @@ class DeployR final
    * 
    * @return The current HiCR instance
    */
-  __INLINE__ HiCR::Instance& getCurrentInstance() { return *_instanceManager->getCurrentInstance(); }
+  __INLINE__ HiCR::Instance& getCurrentHiCRInstance() const { return *_instanceManager->getCurrentInstance(); }
 
   private:
 
@@ -257,70 +227,35 @@ class DeployR final
       return newInstance;
   }
 
-
-  // Function for engine deployment
-  __INLINE__ void initialDeployment()
-  {
-    // Gathering global topology into the root instance
-    _globalTopology = gatherGlobalTopology();
-
-    // If this is not the root instance, wait for incoming RPCs
-    if (isRootInstance() == false)
-    {
-      // Getting deployment information from the root instance
-      _deployment = broadcastDeployment();
-      // printf("Deployment Size: %lu (binary: %lu)\n", _deployment.serialize().dump().size(), nlohmann::json::to_cbor(_deployment.serialize()).size());
-
-      // Identifying local instance
-      _localInstance = identifyLocalInstance();
-
-      // Running initial function assigned to this host
-      runInitialFunction();
-    }
-  }
-
-  /**
-   * [Internal] Launches a provided function on the requested host
-   * 
-   * @param[in] hostIdx The index within the HiCR instanceList_t corresponding to the host that should execute the function (RPC)
-   * @param[in] functionName The name of the function to run. It must be registered on the target host before running
-   */
-  __INLINE__ void launchFunction(const size_t hostIdx, const std::string &functionName)
-  {
-    if (_registeredFunctions.contains(functionName) == false)
-    {
-      fprintf(stderr, "The function RPC '%s' is not registered. Please register it before initializing DeployR.\n", functionName.c_str());
-      _instanceManager->abort(-7);
-    }
-
-    launchRPC(hostIdx, functionName);
-  }
-
   /**
    * [Internal] Gets the global topology, the sum of all local topologies
    * 
    * @return A vector containing each of the local topologies, where the index corresponds to the host index in the getHiCRInstances function
    */
-  [[nodiscard]] __INLINE__ std::vector<nlohmann::json> gatherGlobalTopology()
+  [[nodiscard]] __INLINE__ std::map<HiCR::Instance::instanceId_t, nlohmann::json> gatherGlobalTopology(const std::vector<HiCR::Instance*>& instances)
   {
     // Storage
-    std::vector<nlohmann::json> globalTopology;
+    std::map<HiCR::Instance::instanceId_t, nlohmann::json> globalTopology;
 
-    // If I am not root, listen for the incoming RPC and return an empty topology
-    if (isRootInstance() == false) _rpcEngine->listen();
+    // My instance Id
+    const auto currentHiCRInstanceId = getCurrentHiCRInstance().getId();
 
-    // If I am root, request topology from all instances
-    else
-      for (const auto &instance : _instanceManager->getInstances())
-
-        // If its the root instance (me), just push my local topology
-        if (instance->isRootInstance() == true) globalTopology.push_back(_localTopology.serialize());
-
-        // If not, it's another instance: send RPC and deserialize return value
-        else
+    // If I am not root and I am among the participating instances, then listen for the incoming RPC and return an empty topology
+    if (isRootInstance() == false)
+    {
+       _rpcEngine->listen();
+    }
+    else // If I am root, request topology from all instances
+    {
+      for (const auto instance : instances)
+        if (instance->getId() == currentHiCRInstanceId) // If its me, just push my local topology
+        {
+         globalTopology.insert( { currentHiCRInstanceId, _localTopology.serialize() } );
+        }
+        else // If not, it's another instance: send RPC and deserialize return value
         {
           // Requesting RPC from the remote instance
-          launchRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
+          _rpcEngine->requestRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
 
           // Getting return value as a memory slot
           auto returnValue = _rpcEngine->getReturnValue(*instance);
@@ -335,86 +270,12 @@ class DeployR final
           _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
 
           // Pushing topology into the vector
-          globalTopology.push_back(topologyJson);
+          globalTopology.insert({instance->getId(), topologyJson});
         }
+    }
 
     // Return global topology
     return globalTopology;
-  }
-
-  /**
-   * [Internal] Makes the root instance broadcast the serialized deployment information to all others and deserializes it locally.
-   * 
-   * @return The deserialized Deployment object
-   */
-  __INLINE__ Deployment broadcastDeployment()
-  {
-    // Storage
-    Deployment deployment;
-
-    // If I am root
-    if (isRootInstance() == true)
-    {
-      // listen for the incoming RPCs and return an empty topology
-      for (size_t i = 0; i < _instanceManager->getInstances().size() - 1; i++) _rpcEngine->listen();
-
-      // Copy my own deployment information
-      deployment = _deployment;
-    }
-
-    // If I am not root, request deployment from root
-    else
-    {
-      // Requessting RPC from the remote instance
-      launchRPC(getRootInstanceIndex(), __DEPLOYR_GET_DEPLOYMENT_RPC_NAME);
-
-      // Getting return value as a memory slot
-      auto returnValue = _rpcEngine->getReturnValue(getRootInstance());
-
-      // Receiving raw serialized topology information from the worker
-      std::string serializedDeployment = (char *)returnValue->getPointer();
-
-      // Parsing serialized raw topology into a json object
-      auto deploymentJson = nlohmann::json::parse(serializedDeployment);
-
-      // Freeing return value
-      _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
-
-      // Pushing topology into the vector
-      deployment = Deployment(deploymentJson);
-    }
-
-    // Return global topology
-    return deployment;
-  }
-
-  /**
-   * [Internal] Detects which of the instances in the request corresponds to this local instance
-   * 
-   * @return An instance request object corresponding to the local instance
-   */
-  __INLINE__ deployr::Request::Instance identifyLocalInstance()
-  {
-    // Getting pairings
-    const auto &pairings = _deployment.getPairings();
-
-    // Getting host list
-    const auto &hostList = _deployment.getHosts();
-
-    // Finding the pairing corresponding to this host
-    std::string localInstanceName;
-    for (const auto &p : pairings)
-    {
-      const auto& instanceId = hostList[p.second].getInstanceId();
-      if (instanceId == getCurrentInstance().getId())
-      {
-        localInstanceName = p.first;
-        break;
-      }
-    }
-
-    // Getting requested instance's information
-    return _deployment.getRequest().getInstances().at(localInstanceName);
   }
 
   /**
@@ -422,95 +283,18 @@ class DeployR final
  */
   __INLINE__ void runInitialFunction()
   {
-    // Getting the function to run for the paired instance
-    const auto fcName = _localInstance.getFunction();
-
     // Checking the requested function was registered
-    if (_registeredFunctions.contains(fcName) == false)
+    if (_registeredFunctions.contains(_initialFunction) == false)
     {
-      fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", fcName.c_str());
+      fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", _initialFunction.c_str());
       _instanceManager->abort(-8);
     }
 
     // Getting function pointer
-    const auto &initialFc = _registeredFunctions[fcName];
+    const auto &initialFc = _registeredFunctions[_initialFunction];
 
     // Running initial function
     initialFc();
-  }
-
-  __INLINE__ void deployRemainingInstances(Request &request)
-  {
-    // Making a copy of the requested instances. One of them will be satisfied (and removed) by the currently running instance
-    auto requestedInstances = request.getInstances();
-
-    // Getting requested host types
-    const auto& requestedHostTypes = request.getHostTypes();
-
-    // Looking for requested instances that are satisfied by the currently running instances
-    for (auto requestedInstanceItr = requestedInstances.begin();  requestedInstanceItr != requestedInstances.end(); requestedInstanceItr++)
-    {
-      const auto& requestedInstance = requestedInstanceItr->second;
-      // const auto& requestedInstanceName = requestedInstance.getName();
-      const auto& requestedInstanceHostType = requestedInstance.getHostType();
-      const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
-      
-      // Checking for compatibility
-      deployr::Host localHost(0, _localTopology.serialize());
-      const bool isCompatible = localHost.checkCompatibility(requestedHostType);
-      // printf("Instance %s with type %s is %scompatible\n", requestedInstanceName.c_str(), requestedHostType.getName().c_str(), isCompatible ? "" : "not ");
-      
-      // If it is compatible, then:  
-      if (isCompatible)
-      {
-        // Remove it from the list of new instances to request
-        requestedInstances.erase(requestedInstanceItr);
-
-        // and break the loop
-        break;
-      }
-    }
-
-    // Requesting the creation of the rest of the instances
-    for (const auto& requestedInstanceItr : requestedInstances)
-    {
-      const auto& requestedInstance = requestedInstanceItr.second;
-      // const auto& requestedInstanceName = requestedInstance.getName();
-      const auto& requestedInstanceHostType = requestedInstance.getHostType();
-      const auto& requestedHostType = requestedHostTypes.at(requestedInstanceHostType);
-
-      const auto requestedTopology = HiCR::Topology(requestedHostType.getTopology());
-      const auto requestedTemplate = HiCR::InstanceTemplate(requestedTopology);
-
-      // Creating new instance
-      auto newInstance = createInstance(requestedTemplate);
-    }
-
-    // printf("Active instances: %lu\n", _instanceManager->getInstances().size() );
-  }
-
-  /**
-  * Function to request the execution of an RPC in a remote instance
-  * 
-  * @param[in] instance HiCR instance to execute this RPC
-  * @param[in] RPCName Name of the function to run. It must have been registered in the target instance beforehand to work
-  */
-  __INLINE__ void launchRPC(HiCR::Instance& instance, const std::string &RPCName)
-  {
-    _rpcEngine->requestRPC(instance, RPCName);
-  }
-
-  /**
-    * Function to request the execution of an RPC in a remote instance
-    * 
-    * @param[in] instanceIndex Index within the HiCR instance list corresponding to the instance that must execute this RPC
-    * @param[in] RPCName Name of the function to run. It must have been registered in the target instance beforehand to work
-    */
-  __INLINE__ void launchRPC(const size_t instanceIndex, const std::string &RPCName)
-  {
-    auto &instances = _instanceManager->getInstances();
-    auto &instance  = instances[instanceIndex];
-    this->launchRPC(*instance, RPCName);
   }
 
   /**
@@ -559,16 +343,19 @@ __INLINE__ HiCR::Instance &getRootInstance() const
   * 
   * @return true, if this is the root instance; false, otherwise.
   */
-  [[nodiscard]] __INLINE__ bool isRootInstance() const { return _instanceManager->getCurrentInstance()->getId() == _instanceManager->getRootInstanceId(); }
+  [[nodiscard]] __INLINE__ bool isRootInstance() const { return getCurrentHiCRInstance().getId() == _instanceManager->getRootInstanceId(); }
+
+  /// Request instance id that this HiCR instance
+  Request::Instance::instanceId_t _instanceId;
+
+  /// The initial function this instance needs to run
+  std::string _initialFunction;
 
   /// A map of registered functions, targets for an instance's initial function
   std::map<std::string, std::function<void()>> _registeredFunctions;
 
-  /// Local instance object
-  Request::Instance _localInstance;
-
   /// Storage for the global system topology
-  std::vector<nlohmann::json> _globalTopology;
+  std::map<HiCR::Instance::instanceId_t, nlohmann::json> _globalTopology;
 
   // Object containing the information of the deployment
   Deployment _deployment;

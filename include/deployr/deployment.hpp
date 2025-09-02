@@ -53,7 +53,7 @@ class Deployment final
     std::vector<Pairing> pairingsVector;
 
     // Creating one deployment instance per requested instance
-    for (const auto &requestedInstance : _request.getInstances()) pairingsVector.push_back(Pairing(requestedInstance.second.getName()));
+    for (const auto &requestedInstance : _request.getInstances()) pairingsVector.push_back(Pairing(requestedInstance.second.getId()));
 
     // Building the matching graph
     theAlgorithms::graph::HKGraph graph(pairingsVector.size(), _hosts.size());
@@ -61,20 +61,17 @@ class Deployment final
       for (size_t j = 0; j < _hosts.size(); j++)
       {
         // Getting requested instance's name
-        const auto &requestedInstanceName = pairingsVector[i].getRequestedInstanceName();
+        const auto &requestedInstanceName = pairingsVector[i].getRequestedInstanceId();
 
         // Getting requested instance's information
         const auto &requestedInstance = _request.getInstances().at(requestedInstanceName);
 
         // Getting associated host type name
-        const auto &requestedHostTypeName = requestedInstance.getHostType();
-
-        // Getting actual host type object
-        const auto &requestedHostType = _request.getHostTypes().at(requestedHostTypeName);
+        const auto &requestedTopology = requestedInstance.getTopology();
 
         // Checking if the requested host type is compatible with the current host.
         // If so, add an edge to the graph
-        if (_hosts[j].checkCompatibility(requestedHostType)) graph.addEdge(i, j);
+        if (_hosts[j].checkCompatibility(requestedTopology)) graph.addEdge(i, j);
       }
 
     //  Finding out if a proper matching exists
@@ -88,11 +85,11 @@ class Deployment final
     for (size_t i = 0; i < pairingsVector.size(); i++)
     {
       auto        hostIdx               = (size_t)graphPairings[i + 1];
-      const auto &requestedInstanceName = pairingsVector[i].getRequestedInstanceName();
+      const auto &requestedInstanceId = pairingsVector[i].getRequestedInstanceId();
 
       // Saving pairing in a map
       //printf("Pairing: %lu (%s) -> %lu\n", i, requestedInstanceName.c_str(), hostIdx);
-      _pairings[requestedInstanceName] = hostIdx;
+      _pairings[requestedInstanceId] = hostIdx;
     }
 
     return true;
@@ -110,7 +107,7 @@ class Deployment final
    * 
    * @return A map that links each instance by name to its assigned host index
    */
-  [[nodiscard]] __INLINE__ const std::map<std::string, size_t> &getPairings() const { return _pairings; }
+  [[nodiscard]] __INLINE__ const auto &getPairings() const { return _pairings; }
 
   /**
    * Gets the underlying request used to generate this deployment
@@ -118,61 +115,6 @@ class Deployment final
    * @return The request object
    */
   [[nodiscard]] __INLINE__ const Request &getRequest() const { return _request; }
-
-  /**
-   * Function to serialize the contents of this deployment to be sent to another instance
-   * 
-   * @return A JSON object containing all the information of this deployment
-   */
-  __INLINE__ nlohmann::json serialize() const
-  {
-    // Creating deployment JSON object
-    nlohmann::json deploymentJs;
-
-    // Getting deployment time
-    deploymentJs["Deployment Start Time"] = _deployStartTime;
-
-    // Serializing request
-    deploymentJs["Request"] = _request.serialize();
-
-    // Serializing pairings information
-    size_t pairingsIndex = 0;
-    for (const auto &pairing : _pairings)
-    {
-      deploymentJs["Pairings"][pairingsIndex]["Instance Name"] = pairing.first;
-      deploymentJs["Pairings"][pairingsIndex]["Assigned Host"] = pairing.second;
-      pairingsIndex++;
-    }
-
-    // Serializing host information
-    for (size_t i = 0; i < _hosts.size(); i++) deploymentJs["Hosts"][i] = _hosts[i].serialize();
-
-    return deploymentJs;
-  }
-
-  /**
-   * Deserializing deconstructor of the deployment
-   * 
-   * @param[in] deploymentJs JSON object containing all the information of a deployment
-   */
-  Deployment(const nlohmann::json &deploymentJs)
-  {
-    // Deserializing information
-    _deployStartTime = hicr::json::getString(deploymentJs, "Deployment Start Time");
-    _request         = Request(hicr::json::getObject(deploymentJs, "Request"));
-
-    _pairings.clear();
-    const auto &pairingsJs = hicr::json::getArray<nlohmann::json>(deploymentJs, "Pairings");
-    for (const auto &pairingJs : pairingsJs)
-    {
-      const auto instanceName = hicr::json::getString(pairingJs, "Instance Name");
-      const auto assignedHost = hicr::json::getNumber<size_t>(pairingJs, "Assigned Host");
-      _pairings[instanceName] = assignedHost;
-    }
-
-    const auto &hostsJs = hicr::json::getArray<nlohmann::json>(deploymentJs, "Hosts");
-    for (const auto &hostJs : hostsJs) _hosts.push_back(Host(hostJs));
-  }
 
   private:
 
@@ -184,12 +126,12 @@ class Deployment final
     Pairing() = default;
 
     /**
-     * Constructor that takes the requested instance name
+     * Constructor that takes the requested instance id
      * 
-     * @param[in] requestedInstanceName The name of the instance for this pairing
+     * @param[in] requestedInstanceId The id of the instance for this pairing
      */
-    Pairing(const std::string &requestedInstanceName)
-      : _requestedInstanceName(requestedInstanceName)
+    Pairing(const Request::Instance::instanceId_t requestedInstanceId)
+      : _requestedInstanceId(requestedInstanceId)
     {}
 
     /**
@@ -197,7 +139,7 @@ class Deployment final
      * 
      * @return The instance name
      */
-    [[nodiscard]] const std::string &getRequestedInstanceName() const { return _requestedInstanceName; }
+    [[nodiscard]] const Request::Instance::instanceId_t &getRequestedInstanceId() const { return _requestedInstanceId; }
 
     /**
      * Function to get the index host assigned to the instance
@@ -216,7 +158,7 @@ class Deployment final
     private:
 
     /// The name of the requested instance for this pairing
-    std::string _requestedInstanceName;
+    Request::Instance::instanceId_t _requestedInstanceId;
 
     /// The index of the host assigned to the instance
     size_t _assignedHostIndex;
@@ -229,7 +171,7 @@ class Deployment final
   Request _request;
 
   /// The pairings map: instance name -> HiCR instance vector entry index
-  std::map<std::string, size_t> _pairings;
+  std::map<Request::Instance::instanceId_t, size_t> _pairings;
 
   /// Provided hosts
   std::vector<Host> _hosts;

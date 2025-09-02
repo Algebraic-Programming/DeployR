@@ -38,14 +38,9 @@ class Host final
     * 
     * @return true, if this host satisfies the host type; false, otherwise.
     */
-  [[nodiscard]] __INLINE__ bool checkCompatibility(const Request::HostType &hostType)
+  [[nodiscard]] __INLINE__ bool checkCompatibility(const HiCR::Topology& topology) const
   {
-    ////////// Checking for requested devices
-    const auto hostTopology = HiCR::Topology(hostType.getTopology());
-    const auto requestedTopologyJs = hostType.getTopology();
-
-    //printf("Requirements met\n");
-    return true;
+    return HiCR::Topology::isSubset(_topology, topology);
   }
 
   /**
@@ -60,38 +55,7 @@ class Host final
     * 
     * @return The host topolgoy
     */
-  [[nodiscard]] const nlohmann::json &getTopology() const { return _topology; }
-
-  /**
-    * Serializes the host information to be sent to remote instances and deserialized there
-    * 
-    * @return A JSON-encoded details of the host
-    */
-  [[nodiscard]] __INLINE__ nlohmann::json serialize() const
-  {
-    // Creating host JSON object
-    nlohmann::json hostJs;
-
-    // Getting deployment time
-    hostJs["Instance Id"] = _instanceId;
-
-    // Serializing request
-    hostJs["Topology"] = _topology;
-
-    return hostJs;
-  }
-
-  /**
-    * Deserializing constructor
-    * 
-    * @param[in] hostJs A JSON-encoded details of the host
-    */
-  Host(const nlohmann::json &hostJs)
-  {
-    // Deserializing information
-    _instanceId = hicr::json::getNumber<size_t>(hostJs, "Instance Id");
-    _topology  = hicr::json::getObject(hostJs, "Topology");
-  }
+  [[nodiscard]] const HiCR::Topology &getTopology() const { return _topology; }
 
   private:
 
@@ -99,7 +63,7 @@ class Host final
   size_t _instanceId;
 
   /// Host's actual topology, in JSON format
-  nlohmann::json _topology;
+  HiCR::Topology _topology;
 
 }; // class Host
 
