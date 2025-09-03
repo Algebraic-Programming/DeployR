@@ -142,6 +142,13 @@ int main(int argc, char *argv[])
   auto communicationManager = std::make_shared<HiCR::backend::mpi::CommunicationManager>();
   auto memoryManager        = std::make_shared<HiCR::backend::mpi::MemoryManager>();
 
+  // Making sure we instantiated 3 instances, which is all we need for this example
+  if (instanceManager->getInstances().size() != 3) 
+  {
+    fprintf(stderr, "Error: this example requires three instances to run.\n");
+    exit(-1);
+  }
+  
   // Creating HWloc topology object
   hwloc_topology_t hwlocTopology;
 
