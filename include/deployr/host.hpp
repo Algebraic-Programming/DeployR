@@ -1,6 +1,7 @@
 #pragma once
 
 #include <hicr/core/definitions.hpp>
+#include <hicr/core/instance.hpp>
 #include "request.hpp"
 
 namespace deployr
@@ -13,16 +14,16 @@ class Host final
 {
   public:
 
-  Host() = default;
+  Host() = delete;
 
   /**
     * Constructor for the Host object
     * 
-    * @param[in] instanceId Instance Id corresponding to this host, as given by an instance manager
+    * @param[in] instance HiCR Instance corresponding to this host, as given by an instance manager
     * @param[in] topology The JSON-encoded HiCR topology detected for this host
     */
-  Host(const size_t instanceId, const nlohmann::json &topology)
-    : _instanceId(instanceId),
+  Host(HiCR::Instance* const instance, const nlohmann::json &topology)
+    : _instance(instance),
       _topology(topology)
   {}
   ~Host() = default;
@@ -44,11 +45,11 @@ class Host final
   }
 
   /**
-    * Retrieves the host index
+    * Retrieves the HiCR instance referenced by this host
     * 
-    * @return The host index
+    * @return A pointer to a HiCR instance
     */
-  [[nodiscard]] const size_t getInstanceId() const { return _instanceId; }
+  [[nodiscard]] HiCR::Instance* getInstance() const { return _instance; }
 
   /**
     * Retrieves the host topology
@@ -60,10 +61,10 @@ class Host final
   private:
 
   /// Instance Id corresponding to this host
-  size_t _instanceId;
+  HiCR::Instance* const _instance;
 
   /// Host's actual topology, in JSON format
-  HiCR::Topology _topology;
+  const HiCR::Topology _topology;
 
 }; // class Host
 
