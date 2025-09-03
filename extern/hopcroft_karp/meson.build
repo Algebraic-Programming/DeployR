@@ -1,7 +1,7 @@
 project('hopcroft_karp', [ 'cpp' ])
 
 HopcroftKarpBuildIncludes = include_directories([
-   '.',
+   'include',
   ])
 
 ####### Create dependency

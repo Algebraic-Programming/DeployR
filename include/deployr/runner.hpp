@@ -19,8 +19,8 @@ class Runner
     * Deserializing constructor for the Runner class
     * 
     */
-    Runner(const runnerId_t id, const std::string& function, const HiCR::Topology& topology, const HiCR::Instance::instanceId_t instanceId)
-        : _id(id), _function(function), _topology(topology), _instanceId(instanceId)
+    Runner(const runnerId_t id, const std::string& function, const HiCR::Instance::instanceId_t instanceId)
+        : _id(id), _function(function), _instanceId(instanceId)
     { }
 
     /**
@@ -42,15 +42,7 @@ class Runner
      * 
      * @return the topology required by this instance
      */
-    [[nodiscard]] __INLINE__ const HiCR::Topology &getTopology() const { return _topology; }
-
-    /**
-     * Gets the topology required by this instance
-     * 
-     * @return the topology required by this instance
-     */
     [[nodiscard]] __INLINE__ const HiCR::Instance::instanceId_t getInstanceId() const { return _instanceId; }
-
 
     private:
 
@@ -59,9 +51,6 @@ class Runner
 
     /// Function for this run to run as it is deployed
     const std::string _function;
-
-    /// Hardware topology required by this runner
-    const HiCR::Topology _topology;
 
     /// HiCR instance id assigned to this runner
     const HiCR::Instance::instanceId_t _instanceId;

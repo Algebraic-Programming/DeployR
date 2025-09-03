@@ -5,6 +5,7 @@
 #include <hicr/core/definitions.hpp>
 #include <nlohmann_json/json.hpp>
 #include <nlohmann_json/parser.hpp>
+#include <hopcroft_karp/hopcroft_karp.hpp>
 #include <hicr/backends/pthreads/computeManager.hpp>
 #include <hicr/frontends/RPCEngine/RPCEngine.hpp>
 #include <algorithm>
@@ -34,9 +35,7 @@ class DeployR final
     _instanceManager(instanceManager),
     _rpcEngine(rpcEngine),
     _localTopology(localTopology)
-  {
-
-  }
+  {   }
 
   ~DeployR() = default;
 
@@ -45,6 +44,17 @@ class DeployR final
    */
   __INLINE__ void initialize()
   {
+    // Registering topology exchanging RPC
+    auto gatherTopologyRPC = [this]() {
+      // Serializing
+      const auto serializedTopology = _localTopology.serialize().dump();
+
+      // Returning serialized topology
+      _rpcEngine->submitReturnValue((void *)serializedTopology.c_str(), serializedTopology.size() + 1);
+    };
+
+    // Adding RPC
+    registerRPC(__DEPLOYR_GET_TOPOLOGY_RPC_NAME, gatherTopologyRPC);
   }
 
   /**
@@ -55,7 +65,7 @@ class DeployR final
    * 
    * @param[in] deploymnet A deployment object containing the configuration required to deploy a job
    */
-  __INLINE__ void deploy(const Deployment& deployment)
+  __INLINE__ void deploy(const Deployment& deployment, const HiCR::Instance::instanceId_t coordinatorInstanceId)
   {
     // Getting this running instance information
     const auto& currentInstance = _instanceManager->getCurrentInstance();
@@ -70,13 +80,6 @@ class DeployR final
 
     // Sanity check: make sure there are no repeated instances being used
     if (runners.size() != instanceIds.size()) HICR_THROW_LOGIC("[DeployR] A repeated HiCR instance was provided.\n");
-
-    // If I am not among the participating instances, simply return
-    if (instanceIds.contains(currentInstanceId) == false) return;
-
-    // Designating initial runner as coordinator
-    const auto& coordinatorRunner = runners[0];
-    const auto coordinatorInstanceId = coordinatorRunner.getInstanceId();
 
     // Bifurcation point: this is only run by the non-coordinator instance
     // they are captured until the coordinator syncs up with them
@@ -179,7 +182,104 @@ class DeployR final
    */
   __INLINE__ HiCR::Instance& getCurrentHiCRInstance() const { return *_instanceManager->getCurrentInstance(); }
 
-  private:
+ /**
+ * Gets the global topology, the sum of all local topologies among the provided instances
+ * 
+ * @return A vector containing each of the local topologies, where the index corresponds to the host index in the getHiCRInstances function
+ */
+[[nodiscard]] __INLINE__ std::vector<HiCR::Topology> gatherGlobalTopology(
+  const HiCR::Instance::instanceId_t rootInstanceId,
+  const std::vector<HiCR::Instance::instanceId_t> instanceIds
+  )
+{
+  // Storage
+  std::vector<HiCR::Topology> globalTopology;
+  const auto& currentInstance = _instanceManager->getCurrentInstance();
+  const bool isRootInstance = currentInstance->getId() == rootInstanceId;
+  const auto& instances = _instanceManager->getInstances();
+
+  // If I am not root and I am among the participating instances, then listen for the incoming RPC and return an empty topology
+  if (isRootInstance == false)
+  {
+      _rpcEngine->listen();
+  }
+  else // If I am root, request topology from all instances
+  {
+    for (const auto& instance : instances)
+      if (instance->getId() == currentInstance->getId()) // If its me, just push my local topology
+      {
+        globalTopology.push_back(_localTopology.serialize());
+      }
+      else // If not, it's another instance: send RPC and deserialize return value
+      {
+        // Requesting RPC from the remote instance
+        _rpcEngine->requestRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
+
+        // Getting return value as a memory slot
+        auto returnValue = _rpcEngine->getReturnValue(*instance);
+
+        // Receiving raw serialized topology information from the worker
+        std::string serializedTopology = (char *)returnValue->getPointer();
+
+        // Parsing serialized raw topology into a json object
+        auto topologyJson = nlohmann::json::parse(serializedTopology);
+
+        // Freeing return value
+        _rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
+
+        // Creating new topology object
+        HiCR::Topology topology(topologyJson);
+
+        // Pushing topology into the vector
+        globalTopology.push_back(topology);
+      }
+  }
+
+  // Return global topology
+  return globalTopology;
+}
+
+/**
+ * Performs a matching between the a set of required topologies and a set of given (existing) topologies and returns, if exists, a possible pairing.
+ * 
+ * A pairing consists of a 1:1 mapping of the required topologies and the given topologies. For each pairing the given topology is a equal or a superset of the required one.
+ * 
+ * This implementation uses the Hopcroft-Karp algorithm to find a matching of all requested runners to a host.
+ * 
+ * @return If successful, a vector of size size(requested) containing the indexes of the given topologies that match the requested ones. Otherwise, an empty vector.
+ */
+[[nodiscard]] __INLINE__ static std::vector<size_t> doBipartiteMatching(const std::vector<HiCR::Topology>& requested, const std::vector<HiCR::Topology>& given)
+{
+  // Creating pairings vector
+  std::vector<size_t> pairingsVector;
+
+  // Creating one deployment runner per requested runner
+  for (size_t i = 0; i < requested.size(); i++) pairingsVector.push_back(i);
+
+  // Building the matching graph
+  theAlgorithms::graph::HKGraph graph(pairingsVector.size(), given.size());
+  for (size_t i = 0; i < pairingsVector.size(); i++)
+    for (size_t j = 0; j < given.size(); j++)
+      if (HiCR::Topology::isSubset(given[j], requested[i])) graph.addEdge(i, j);
+
+  //  Finding out if a proper matching exists
+  auto matchCount = (size_t)graph.hopcroftKarpAlgorithm();
+
+  // If the number of matchings is smaller than requested, return an empty vector
+  if (matchCount < pairingsVector.size()) return {};
+
+  // Getting the pairings from the graph
+  const auto graphPairings = graph.getLeftSidePairings();
+  for (size_t i = 0; i < pairingsVector.size(); i++)
+  {
+    const auto givenIdx = (size_t)graphPairings[i + 1];
+    pairingsVector[i] = givenIdx;
+  }
+
+  return pairingsVector;
+}
+
+private:
 
   __INLINE__ std::shared_ptr<HiCR::Instance> createInstance(const HiCR::InstanceTemplate t)
   {

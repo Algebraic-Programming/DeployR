@@ -8,133 +8,6 @@
 #include <hicr/backends/hwloc/topologyManager.hpp>
 #include "deploy.hpp"
 
-/**
- * Gets the global topology, the sum of all local topologies
- * 
- * @return A vector containing each of the local topologies, where the index corresponds to the host index in the getHiCRInstances function
- */
-[[nodiscard]] __INLINE__ std::vector<nlohmann::json> gatherGlobalTopology(
-  HiCR::frontend::RPCEngine* rpcEngine,
-  HiCR::InstanceManager* instanceManager,
-  const HiCR::Topology& localTopology)
-{
-  // Registering topology exchanging RPC
-  auto gatherTopologyRPC = [&](void*) {
-    // Serializing
-    const auto serializedTopology = localTopology.serialize().dump();
-
-    // Returning serialized topology
-    rpcEngine->submitReturnValue((void *)serializedTopology.c_str(), serializedTopology.size() + 1);
-  };
-
-  // Registering RPC
-  auto RPCExecutionUnit = HiCR::backend::pthreads::ComputeManager::createExecutionUnit(gatherTopologyRPC);
-
-  // Adding RPC
-  rpcEngine->addRPCTarget("Exchange Topology", RPCExecutionUnit);
-
-  // Storage
-  std::vector<nlohmann::json> globalTopology;
-  const auto& currentInstance = instanceManager->getCurrentInstance();
-  const bool isRootInstance = currentInstance->isRootInstance();
-  const auto& instances = instanceManager->getInstances();
-
-  // If I am not root and I am among the participating instances, then listen for the incoming RPC and return an empty topology
-  if (isRootInstance == false)
-  {
-      rpcEngine->listen();
-  }
-  else // If I am root, request topology from all instances
-  {
-    for (const auto& instance : instances)
-      if (instance->getId() == currentInstance->getId()) // If its me, just push my local topology
-      {
-        globalTopology.push_back(localTopology.serialize());
-      }
-      else // If not, it's another instance: send RPC and deserialize return value
-      {
-        // Requesting RPC from the remote instance
-        rpcEngine->requestRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
-
-        // Getting return value as a memory slot
-        auto returnValue = rpcEngine->getReturnValue(*instance);
-
-        // Receiving raw serialized topology information from the worker
-        std::string serializedTopology = (char *)returnValue->getPointer();
-
-        // Parsing serialized raw topology into a json object
-        auto topologyJson = nlohmann::json::parse(serializedTopology);
-
-        // Freeing return value
-        rpcEngine->getMemoryManager()->freeLocalMemorySlot(returnValue);
-
-        // Pushing topology into the vector
-        globalTopology.push_back(topologyJson);
-      }
-  }
-
-  // Return global topology
-  return globalTopology;
-}
-
-/**
- * Performs a matching between the requested runners and the available hosts
- * 
- * This implementation uses the Hopcroft-Karp algorithm to find a matching of all requested runners to a host.
- * 
- * @return True, if the matching was possible. False, otherwise.
- */
-[[nodiscard]] __INLINE__ bool performMatching(const deployr::Deployment& request, const std::vector<HiCR::Topology*>& hosts)
-{
-  // /// The pairings map: runner name -> HiCR instance vector entry index
-  // std::map<deployr::Runner::runnerId_t, HiCR::Topology*> pairings;
-
-  // // Creating flat pairings vector
-  // std::vector<deployr::Deployment::Pairing> pairingsVector;
-
-  // // Creating one deployment runner per requested runner
-  // for (const auto &requestedRunner : request.getRunners()) pairingsVector.push_back(deployr::Deployment::Pairing(requestedRunner.second.getId()));
-
-  // // Building the matching graph
-  // theAlgorithms::graph::HKGraph graph(pairingsVector.size(), hosts.size());
-  // for (size_t i = 0; i < pairingsVector.size(); i++)
-  //   for (size_t j = 0; j < hosts.size(); j++)
-  //   {
-  //     // Getting requested runner's name
-  //     const auto &requestedRunnerName = pairingsVector[i].getRequestedRunnerId();
-
-  //     // Getting requested runner's information
-  //     const auto &requestedRunner = request.getRunners().at(requestedRunnerName);
-
-  //     // Getting associated host type name
-  //     const auto &requestedTopology = requestedRunner.getTopology();
-
-  //     // Checking if the requested host type is compatible with the current host.
-  //     // If so, add an edge to the graph
-  //     if (hosts[j]->checkCompatibility(requestedTopology)) graph.addEdge(i, j);
-  //   }
-
-  // //  Finding out if a proper matching exists
-  // auto matchCount = (size_t)graph.hopcroftKarpAlgorithm();
-
-  // // If the number of matchings is smaller than requested, return false
-  // if (matchCount < pairingsVector.size()) return false;
-
-  // // Getting the pairings from the graph
-  // const auto graphPairings = graph.getLeftSidePairings();
-  // for (size_t i = 0; i < pairingsVector.size(); i++)
-  // {
-  //   auto        hostIdx           = (size_t)graphPairings[i + 1];
-  //   const auto &requestedRunnerId = pairingsVector[i].getRequestedRunnerId();
-
-  //   // Saving pairing in a map
-  //   //printf("Pairing: %lu (%s) -> %lu\n", i, requestedRunnerName.c_str(), hostIdx);
-  //   pairings[requestedRunnerId] = hosts[hostIdx];
-  // }
-
-  return true;
-}
-
 int main(int argc, char *argv[])
 {
   // Getting MPI managers
@@ -146,9 +19,9 @@ int main(int argc, char *argv[])
   if (instanceManager->getInstances().size() != 3) 
   {
     fprintf(stderr, "Error: this example requires three instances to run.\n");
-    exit(-1);
+    instanceManager->abort(-1);
   }
-  
+
   // Creating HWloc topology object
   hwloc_topology_t hwlocTopology;
 
@@ -192,8 +65,55 @@ int main(int argc, char *argv[])
   // Creating deployr object
   deployr::DeployR deployr(instanceManager.get(), &rpcEngine, topology);
 
-  // Calling main algorithm driver
-  deploy(deployr, instances);
+  // Initializing deployr object
+  deployr.initialize();
+
+  // Getting the topology of the other MPI processes
+  std::vector<HiCR::Instance::instanceId_t> instanceIds;
+  for (const auto& instance : instanceManager->getInstances()) instanceIds.push_back(instance->getId());
+  const auto globalTopology = deployr.gatherGlobalTopology(instanceManager->getRootInstanceId(), instanceIds);
+  
+  // Creating deployment object
+  deployr::Deployment deployment;
+
+  // Gathering deployment information from json file. This only needs to be done by the deployment coordinator (root, in this case)
+  if (instanceManager->getCurrentInstance()->isRootInstance())
+  {
+    // Checking arguments
+    if (argc != 2)
+    {   
+      fprintf(stderr, "Error: You need to pass a deployment.json file as parameter.\n");
+      instanceManager->abort(-1);
+    }
+
+    // Reading deployment file
+    std::string deploymentFilePath = std::string(argv[1]);
+
+    // Parsing request file contents to a JSON object
+    std::ifstream ifs(deploymentFilePath);
+    auto  deploymentJs = nlohmann::json::parse(ifs);
+
+    // Getting requested topologies from the json file
+    std::vector<HiCR::Topology> requestedTopologies;
+    for (const auto& runner : deploymentJs["Runners"]) requestedTopologies.push_back(HiCR::Topology(runner["Topology"]));
+
+    // Determine best pairing between the detected instances
+    const auto matching = deployr::DeployR::doBipartiteMatching(requestedTopologies, globalTopology);
+
+    // Check matching
+    if (matching.size() != requestedTopologies.size())
+    {   
+      fprintf(stderr, "Error: The provided instances do not have the sufficient hardware resources to run this job.\n");
+      instanceManager->abort(-1);
+    }
+
+    // Creating the runner objects
+    for (size_t i = 0; i < deploymentJs["Runners"].size(); i++)
+     deployment.addRunner(deployr::Runner(i, deploymentJs["Runners"][i]["Function"].get<std::string>(), matching[i]));
+  }
+
+  // Deploying
+  deploy(deployr, deployment, instanceManager->getRootInstanceId());
 
   // Finalizing instance manager
   instanceManager->finalize();

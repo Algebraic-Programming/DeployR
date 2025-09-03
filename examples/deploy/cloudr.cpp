@@ -8,7 +8,7 @@
 #include <hicr/backends/mpi/instanceManager.hpp>
 #include <hicr/backends/hwloc/topologyManager.hpp>
 #include <deployr/deployr.hpp>
-#include "deploy.hpp"
+// #include "deploy.hpp"
 
 int main(int argc, char *argv[])
 {
@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
     deployr::DeployR deployr(&cloudrInstanceManager, &rpcEngine, topology);
 
     // Calling main algorithm driver
-    deploy(deployr, {});
+    // deploy(deployr, {});
   });
 
   // Initializing CloudR
