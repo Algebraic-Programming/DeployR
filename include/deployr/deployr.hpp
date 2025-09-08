@@ -74,6 +74,9 @@ class DeployR final
     // Getting runner set
     const auto& runners = deployment.getRunners();
 
+    // Remembering if the coordinator is assigned a runner role
+    bool coodinatorIsRunner = false;
+
     // Gathering required HiCR instances into a set
     std::set<HiCR::Instance::instanceId_t> instanceIds;
     for (const auto& runner : runners) instanceIds.insert(runner.getId());
@@ -104,6 +107,7 @@ class DeployR final
        // If the pairing refers to this host, assign its function name but delay execution
        if (instanceId == currentInstanceId)
        {
+        coodinatorIsRunner = true;
         _initialFunction = initialFcName;
         _runnerId = runnerId;
         continue;
@@ -113,8 +117,8 @@ class DeployR final
       _rpcEngine->requestRPC(*instance, initialFcName, runnerId);
     }
 
-    // Running initial function assigned to this host
-    runInitialFunction();
+    // Running initial function, if one has been assigned to the coordinator
+    if (coodinatorIsRunner) runInitialFunction();
   }
 
   /**
@@ -294,10 +298,7 @@ private:
       }
       
       if (newInstance.get() == nullptr)
-      {
-        fprintf(stderr, "Failed to create new instance with requested topology: %s\n", t.getTopology().serialize().dump(2).c_str());
-        abort();
-      }
+        HICR_THROW_FATAL("Failed to create new instance with requested topology: %s\n", t.getTopology().serialize().dump(2).c_str());
 
       return newInstance;
   }
@@ -309,10 +310,7 @@ private:
   {
     // Checking the requested function was registered
     if (_registeredFunctions.contains(_initialFunction) == false)
-    {
-      fprintf(stderr, "The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", _initialFunction.c_str());
-      _instanceManager->abort(-8);
-    }
+      HICR_THROW_FATAL("The requested function name '%s' is not registered. Please register it before initializing DeployR.\n", _initialFunction.c_str());
 
     // Getting function pointer
     const auto &initialFc = _registeredFunctions[_initialFunction];

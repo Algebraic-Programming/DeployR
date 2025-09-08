@@ -1,10 +1,10 @@
 #include <deployr/deployr.hpp>
 #include <fstream>
 
-void coordinatorFc(deployr::DeployR &deployr)
+void leaderFc(deployr::DeployR &deployr)
 {
   // Getting local instance
-  printf("[CoordinatorFc] Hi, I am instance id: %lu\n", deployr.getInstanceId());
+  printf("[LeaderFc] Hi, I am instance id: %lu\n", deployr.getInstanceId());
 }
 
 void workerFc(deployr::DeployR &deployr)
@@ -15,8 +15,11 @@ void workerFc(deployr::DeployR &deployr)
 
 void deploy(deployr::DeployR &deployr, const deployr::Deployment& deployment, const HiCR::Instance::instanceId_t coordinatorInstanceId)
 {
+  // Initializing DeployR
+  deployr.initialize();
+
   // Registering Functions
-  deployr.registerFunction("CoordinatorFc", [&]() { coordinatorFc(deployr); });
+  deployr.registerFunction("LeaderFc", [&]() { leaderFc(deployr); });
   deployr.registerFunction("WorkerFc", [&]() { workerFc(deployr); });
 
   // Deploying now
