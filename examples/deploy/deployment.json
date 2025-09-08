@@ -1,0 +1,69 @@
+{
+    "Runners":
+    [
+        {
+            "Function": "LeaderFc",
+            "Topology": { }
+        },
+        {
+            "Function": "WorkerFc",
+            "Topology":
+            {
+                "Devices":
+                [
+                    {
+                        "Type": "NUMA Domain",
+                        "Compute Resources":
+                        [
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" }
+                        ],
+                        "Memory Spaces":
+                        [
+                            {
+                                "Type": "RAM",
+                                "Size": 33554432
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "Function": "WorkerFc",
+            "Topology":
+            {
+                "Devices":
+                [
+                    {
+                        "Type": "NUMA Domain",
+                        "Compute Resources":
+                        [
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" },
+                            { "Type": "Processing Unit" }
+                        ],
+                        "Memory Spaces":
+                        [
+                            {
+                                "Type": "RAM",
+                                "Size": 33554432
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}
