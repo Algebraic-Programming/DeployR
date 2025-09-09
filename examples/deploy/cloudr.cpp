@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
   {   
     fprintf(stderr, "Error: You need to pass a deployment.json and a cloudr.json file as parameters.\n");
     instanceManager->finalize();
-    return 0;
+    return -1;
   }
 
   // Reading cloudr config file
@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
   {   
     fprintf(stderr, "Error: The number of requested cloudr instances (%lu) is different than the number of instances provided (%lu)\n", cloudrConfigJs["Topologies"].size(), instanceManager->getInstances().size());
     instanceManager->finalize();
-    return 0;
+    return -1;
   }
 
   // Getting my emulated topology from the cloudr configuration file

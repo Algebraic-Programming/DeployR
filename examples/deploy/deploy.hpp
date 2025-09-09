@@ -4,13 +4,13 @@
 void leaderFc(deployr::DeployR &deployr)
 {
   // Getting local instance
-  printf("[LeaderFc] Hi, I am instance id: %lu\n", deployr.getInstanceId());
+  printf("[LeaderFc] Hi, I am instance id: %lu\n", deployr.getRunnerId());
 }
 
 void workerFc(deployr::DeployR &deployr)
 {
   // Getting local instance
-  printf("[WorkerFc] Hi, I am instance id: %lu\n", deployr.getInstanceId());
+  printf("[WorkerFc] Hi, I am instance id: %lu\n", deployr.getRunnerId());
 }
 
 void deploy(deployr::DeployR &deployr, const deployr::Deployment& deployment, const HiCR::Instance::instanceId_t coordinatorInstanceId)
