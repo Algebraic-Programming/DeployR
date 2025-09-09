@@ -147,7 +147,7 @@ class DeployR final
    * 
    * @return The id of the running instance
    */
-  [[nodiscard]] __INLINE__ const Runner::runnerId_t getInstanceId() const
+  [[nodiscard]] __INLINE__ const Runner::runnerId_t getRunnerId() const
   {
     // If I am root, I remembered my instance Id
     if (_instanceManager->getCurrentInstance()->isRootInstance() == true) return _runnerId;
