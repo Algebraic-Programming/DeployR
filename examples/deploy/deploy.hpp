@@ -13,7 +13,7 @@ void workerFc(deployr::DeployR &deployr)
   printf("[WorkerFc] Hi, I am instance id: %lu\n", deployr.getRunnerId());
 }
 
-void deploy(deployr::DeployR &deployr, const deployr::Deployment& deployment, const HiCR::Instance::instanceId_t coordinatorInstanceId)
+void deploy(deployr::DeployR &deployr, const deployr::Deployment &deployment, const HiCR::Instance::instanceId_t coordinatorInstanceId)
 {
   // Initializing DeployR
   deployr.initialize();

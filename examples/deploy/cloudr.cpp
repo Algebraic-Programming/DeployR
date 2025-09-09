@@ -13,19 +13,20 @@
 int main(int argc, char *argv[])
 {
   // Instantiating base managers
-  auto instanceManager         = HiCR::backend::mpi::InstanceManager::createDefault(&argc, &argv);
-  auto communicationManager    = HiCR::backend::mpi::CommunicationManager(MPI_COMM_WORLD);
-  auto memoryManager           = HiCR::backend::mpi::MemoryManager();
-  auto computeManager          = HiCR::backend::pthreads::ComputeManager();
+  auto instanceManager      = HiCR::backend::mpi::InstanceManager::createDefault(&argc, &argv);
+  auto communicationManager = HiCR::backend::mpi::CommunicationManager(MPI_COMM_WORLD);
+  auto memoryManager        = HiCR::backend::mpi::MemoryManager();
+  auto computeManager       = HiCR::backend::pthreads::ComputeManager();
 
   // Getting my base instance id and index
-  const auto baseInstanceId = instanceManager->getCurrentInstance()->getId();
-  uint64_t baseInstanceIdx = 0;
-  for (size_t i = 0; i < instanceManager->getInstances().size(); i++) if (instanceManager->getInstances()[i]->getId() == baseInstanceId) baseInstanceIdx = i;
+  const auto baseInstanceId  = instanceManager->getCurrentInstance()->getId();
+  uint64_t   baseInstanceIdx = 0;
+  for (size_t i = 0; i < instanceManager->getInstances().size(); i++)
+    if (instanceManager->getInstances()[i]->getId() == baseInstanceId) baseInstanceIdx = i;
 
   // Checking for parameters
   if (argc != 3)
-  {   
+  {
     fprintf(stderr, "Error: You need to pass a deployment.json and a cloudr.json file as parameters.\n");
     instanceManager->finalize();
     return -1;
@@ -36,12 +37,15 @@ int main(int argc, char *argv[])
 
   // Parsing deployment file contents to a JSON object
   std::ifstream ifs(cloudrConfigFilePath);
-  auto  cloudrConfigJs = nlohmann::json::parse(ifs);
+  auto          cloudrConfigJs = nlohmann::json::parse(ifs);
 
   // Make sure we're running the number of base instances as emulated cloudr instances
   if (instanceManager->getInstances().size() != cloudrConfigJs["Topologies"].size())
-  {   
-    fprintf(stderr, "Error: The number of requested cloudr instances (%lu) is different than the number of instances provided (%lu)\n", cloudrConfigJs["Topologies"].size(), instanceManager->getInstances().size());
+  {
+    fprintf(stderr,
+            "Error: The number of requested cloudr instances (%lu) is different than the number of instances provided (%lu)\n",
+            cloudrConfigJs["Topologies"].size(),
+            instanceManager->getInstances().size());
     instanceManager->finalize();
     return -1;
   }
@@ -57,11 +61,11 @@ int main(int argc, char *argv[])
   auto hwlocTopologyManager = HiCR::backend::hwloc::TopologyManager(&hwlocTopology);
 
   // Finding the first memory space and compute resource to create our RPC engine
-  const auto& topology           = hwlocTopologyManager.queryTopology();
-  const auto& firstDevice        = topology.getDevices().begin().operator*();
-  const auto& RPCMemorySpace     = firstDevice->getMemorySpaceList().begin().operator*();
-  const auto& RPCComputeResource = firstDevice->getComputeResourceList().begin().operator*();
-  
+  const auto &topology           = hwlocTopologyManager.queryTopology();
+  const auto &firstDevice        = topology.getDevices().begin().operator*();
+  const auto &RPCMemorySpace     = firstDevice->getMemorySpaceList().begin().operator*();
+  const auto &RPCComputeResource = firstDevice->getComputeResourceList().begin().operator*();
+
   // Instantiating RPC engine
   HiCR::frontend::RPCEngine rpcEngine(communicationManager, *instanceManager, memoryManager, computeManager, RPCMemorySpace, RPCComputeResource);
 
@@ -72,14 +76,13 @@ int main(int argc, char *argv[])
   deployr::Deployment deployment;
 
   // Instantiating CloudR
-  HiCR::backend::cloudr::InstanceManager cloudrInstanceManager(&rpcEngine, emulatedTopology, [&]()
-  {
+  HiCR::backend::cloudr::InstanceManager cloudrInstanceManager(&rpcEngine, emulatedTopology, [&]() {
     // Getting our current cloudr instance
-    const auto& currentInstance = cloudrInstanceManager.getCurrentInstance();
+    const auto &currentInstance = cloudrInstanceManager.getCurrentInstance();
 
     // Getting our instance's emulated topology
-    const auto& emulatedTopology = dynamic_pointer_cast<HiCR::backend::cloudr::Instance>(currentInstance)->getTopology();
-    
+    const auto &emulatedTopology = dynamic_pointer_cast<HiCR::backend::cloudr::Instance>(currentInstance)->getTopology();
+
     // Creating deployr object
     deployr::DeployR deployr(&cloudrInstanceManager, &rpcEngine, emulatedTopology);
 
@@ -101,27 +104,27 @@ int main(int argc, char *argv[])
 
     // Parsing deployment file contents to a JSON object
     std::ifstream ifs(deploymentFilePath);
-    auto  deploymentJs = nlohmann::json::parse(ifs);
+    auto          deploymentJs = nlohmann::json::parse(ifs);
 
     // Getting requested topologies from the json file
-    for (size_t i = 0; i < deploymentJs["Runners"].size(); i++) 
+    for (size_t i = 0; i < deploymentJs["Runners"].size(); i++)
     {
       // Getting runner
-      const auto& runner = deploymentJs["Runners"][i];
+      const auto &runner = deploymentJs["Runners"][i];
 
       // Assigning runner topology
       const auto runnerTopology = HiCR::Topology(runner["Topology"]);
 
       // Asking cloudr to create new instances based on the topology requirement
       const auto instanceTemplate = cloudrInstanceManager.createInstanceTemplate(runnerTopology);
-      auto instance = cloudrInstanceManager.createInstance(*instanceTemplate);
+      auto       instance         = cloudrInstanceManager.createInstance(*instanceTemplate);
 
       // Adding new instances to list of newly created instances
       newInstances.push_back(instance);
 
       // Sanity check
-      if (instance == nullptr) 
-       {   
+      if (instance == nullptr)
+      {
         fprintf(stderr, "Error: Could not create instance with required topology: %s\n", runnerTopology.serialize().dump(2).c_str());
         instanceManager->abort(-1);
       }
@@ -132,13 +135,14 @@ int main(int argc, char *argv[])
 
     // Creating deployr object
     deployr::DeployR deployr(&cloudrInstanceManager, &rpcEngine, topology);
-    
+
     // Calling main algorithm driver
     deploy(deployr, deployment, cloudrInstanceManager.getCurrentInstance()->getId());
   }
 
   // Reliqushing newly created instances from cloudr
-  if (cloudrInstanceManager.getCurrentInstance()->isRootInstance()) for (const auto& instance : newInstances) cloudrInstanceManager.terminateInstance(instance);
+  if (cloudrInstanceManager.getCurrentInstance()->isRootInstance())
+    for (const auto &instance : newInstances) cloudrInstanceManager.terminateInstance(instance);
 
   // Finalizing cloudR
   cloudrInstanceManager.finalize();
