@@ -20,7 +20,7 @@ class Deployment final
   /**
    * Add an instance
    */
-  __INLINE__ void addRunner(const Runner& runner) { _runners.push_back(runner); }
+  __INLINE__ void addRunner(const Runner &runner) { _runners.push_back(runner); }
 
   /**
    * Gets the instance map

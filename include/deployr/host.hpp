@@ -22,7 +22,7 @@ class Host final
     * @param[in] instance HiCR Instance corresponding to this host, as given by an instance manager
     * @param[in] topology The JSON-encoded HiCR topology detected for this host
     */
-  Host(HiCR::Instance* const instance, const nlohmann::json &topology)
+  Host(HiCR::Instance *const instance, const nlohmann::json &topology)
     : _instance(instance),
       _topology(topology)
   {}
@@ -39,17 +39,14 @@ class Host final
     * 
     * @return true, if this host satisfies the host type; false, otherwise.
     */
-  [[nodiscard]] __INLINE__ bool checkCompatibility(const HiCR::Topology& topology) const
-  {
-    return HiCR::Topology::isSubset(_topology, topology);
-  }
+  [[nodiscard]] __INLINE__ bool checkCompatibility(const HiCR::Topology &topology) const { return HiCR::Topology::isSubset(_topology, topology); }
 
   /**
     * Retrieves the HiCR instance referenced by this host
     * 
     * @return A pointer to a HiCR instance
     */
-  [[nodiscard]] HiCR::Instance* getInstance() const { return _instance; }
+  [[nodiscard]] HiCR::Instance *getInstance() const { return _instance; }
 
   /**
     * Retrieves the host topology
@@ -61,7 +58,7 @@ class Host final
   private:
 
   /// Instance Id corresponding to this host
-  HiCR::Instance* const _instance;
+  HiCR::Instance *const _instance;
 
   /// Host's actual topology, in JSON format
   const HiCR::Topology _topology;

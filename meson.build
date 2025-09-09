@@ -39,6 +39,7 @@ if 'lpf' in engines
 endif
 
 if 'cloudr' in engines
+  mpirunExecutable = find_program('mpirun', '/usr/bin/mpirun', '/usr/local/bin/mpirun', required : true)
   CloudRProject = subproject('cloudr', required: true, default_options: [  ])
   CloudRBuildDep = CloudRProject.get_variable('CloudRBuildDep')
   deployrDependencies += CloudRBuildDep
