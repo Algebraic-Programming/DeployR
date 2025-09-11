@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
   auto memoryManager        = std::make_shared<HiCR::backend::mpi::MemoryManager>();
 
   // Making sure we instantiated 3 instances, which is all we need for this example
-  if (instanceManager->getInstances().size() != 3) 
+  if (instanceManager->getInstances().size() != 3)
   {
     fprintf(stderr, "Error: this example requires three instances to run.\n");
     instanceManager->abort(-1);
@@ -56,8 +56,8 @@ int main(int argc, char *argv[])
   HiCR::frontend::RPCEngine rpcEngine(*communicationManager, *instanceManager, *memoryManager, computeManager, bufferMemorySpace, computeResource);
 
   // Gathering instances to run the example with
-  std::vector<HiCR::Instance*> instances;
-  for (const auto& instance : instanceManager->getInstances()) instances.push_back(instance.get());
+  std::vector<HiCR::Instance *> instances;
+  for (const auto &instance : instanceManager->getInstances()) instances.push_back(instance.get());
 
   // Initialize RPC engine
   rpcEngine.initialize();
@@ -70,9 +70,9 @@ int main(int argc, char *argv[])
 
   // Getting the topology of the other MPI processes
   std::vector<HiCR::Instance::instanceId_t> instanceIds;
-  for (const auto& instance : instanceManager->getInstances()) instanceIds.push_back(instance->getId());
+  for (const auto &instance : instanceManager->getInstances()) instanceIds.push_back(instance->getId());
   const auto globalTopology = deployr.gatherGlobalTopology(instanceManager->getRootInstanceId(), instanceIds);
-  
+
   // Creating deployment object
   deployr::Deployment deployment;
 
@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
   {
     // Checking arguments
     if (argc != 2)
-    {   
+    {
       fprintf(stderr, "Error: You need to pass a deployment.json file as parameter.\n");
       instanceManager->abort(-1);
     }
@@ -91,25 +91,24 @@ int main(int argc, char *argv[])
 
     // Parsing request file contents to a JSON object
     std::ifstream ifs(deploymentFilePath);
-    auto  deploymentJs = nlohmann::json::parse(ifs);
+    auto          deploymentJs = nlohmann::json::parse(ifs);
 
     // Getting requested topologies from the json file
     std::vector<HiCR::Topology> requestedTopologies;
-    for (const auto& runner : deploymentJs["Runners"]) requestedTopologies.push_back(HiCR::Topology(runner["Topology"]));
+    for (const auto &runner : deploymentJs["Runners"]) requestedTopologies.push_back(HiCR::Topology(runner["Topology"]));
 
     // Determine best pairing between the detected instances
     const auto matching = deployr::DeployR::doBipartiteMatching(requestedTopologies, globalTopology);
 
     // Check matching
     if (matching.size() != requestedTopologies.size())
-    {   
+    {
       fprintf(stderr, "Error: The provided instances do not have the sufficient hardware resources to run this job.\n");
       instanceManager->abort(-1);
     }
 
     // Creating the runner objects
-    for (size_t i = 0; i < deploymentJs["Runners"].size(); i++)
-     deployment.addRunner(deployr::Runner(i, deploymentJs["Runners"][i]["Function"].get<std::string>(), matching[i]));
+    for (size_t i = 0; i < deploymentJs["Runners"].size(); i++) deployment.addRunner(deployr::Runner(i, deploymentJs["Runners"][i]["Function"].get<std::string>(), matching[i]));
   }
 
   // Deploying
