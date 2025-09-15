@@ -114,7 +114,7 @@ class DeployR final
       }
 
       // Sending RPC
-      _rpcEngine->requestRPC(*instance, initialFcName, runnerId);
+      _rpcEngine->requestRPC(instance->getId(), initialFcName, runnerId);
     }
 
     // Running initial function, if one has been assigned to the coordinator
@@ -209,10 +209,10 @@ class DeployR final
         else // If not, it's another instance: send RPC and deserialize return value
         {
           // Requesting RPC from the remote instance
-          _rpcEngine->requestRPC(*instance, __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
+          _rpcEngine->requestRPC(instance->getId(), __DEPLOYR_GET_TOPOLOGY_RPC_NAME);
 
           // Getting return value as a memory slot
-          auto returnValue = _rpcEngine->getReturnValue(*instance);
+          auto returnValue = _rpcEngine->getReturnValue();
 
           // Receiving raw serialized topology information from the worker
           std::string serializedTopology = (char *)returnValue->getPointer();

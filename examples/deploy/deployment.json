@@ -16,19 +16,13 @@
                         "Compute Resources":
                         [
                             { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
                             { "Type": "Processing Unit" }
                         ],
                         "Memory Spaces":
                         [
                             {
                                 "Type": "RAM",
-                                "Size": 33554432
+                                "Size": 10000000
                             }
                         ]
                     }
@@ -46,19 +40,13 @@
                         "Compute Resources":
                         [
                             { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
-                            { "Type": "Processing Unit" },
                             { "Type": "Processing Unit" }
                         ],
                         "Memory Spaces":
                         [
                             {
                                 "Type": "RAM",
-                                "Size": 33554432
+                                "Size": 10000000
                             }
                         ]
                     }
