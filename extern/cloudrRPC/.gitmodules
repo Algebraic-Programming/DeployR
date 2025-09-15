@@ -1,0 +1,6 @@
+[submodule "extern/HiCR"]
+	path = extern/HiCR
+	url = https://github.com/Algebraic-Programming/HiCR.git
+[submodule "extern/TaskR"]
+	path = extern/TaskR
+	url = https://github.com/Algebraic-Programming/TaskR.git
